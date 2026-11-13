@@ -203,6 +203,9 @@ export default function VoteClient() {
     if (message && !await confirm({ title: message, confirmLabel: label })) return;
     const verifiedToken = currentToken.current;
     if (!verifiedToken) { notify("本人確認の完了後にもう一度お試しください。"); return; }
+    // A Turnstile token is single-use. Disable all action buttons immediately,
+    // before the request or any subsequent eligibility refresh can render.
+    updateToken("");
     setSaving(action.id);
     try {
       const response = await fetch("/api/vote/actions", {
@@ -243,6 +246,9 @@ export default function VoteClient() {
     if (!ok) return;
     const verifiedToken = currentToken.current;
     if (!verifiedToken) { notify("本人確認の完了後にもう一度お試しください。"); return; }
+    // The cast consumes this token. The action list may become eligible while
+    // showSuccess() is refreshing it, but must never expose the consumed token.
+    updateToken("");
     setSaving(poll.id);
     try {
       const response = await fetch("/api/vote/cast", {
