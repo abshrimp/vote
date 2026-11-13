@@ -737,9 +737,11 @@ export default function FormStudio({ initialData, onLogout }: {
           ids: [...new Set([ ...((next[key]?.ids as string[] | undefined) ?? []), ...persisted ])] };
       }
       const order = next["candidate_order:" + poll.id];
-      if (order) next["candidate_order:" + poll.id] = {
-        ...order, ids: (order.ids as string[]).filter(id => !deleted.has(id)),
-      };
+      if (order) {
+        const remainingIds = (order.ids as string[]).filter(id => !deleted.has(id));
+        if (remainingIds.length) next["candidate_order:" + poll.id] = { ...order, ids: remainingIds };
+        else delete next["candidate_order:" + poll.id];
+      }
       return next;
     });
     setData(d => ({ ...d, polls: d.polls.map(p => p.id === poll.id
