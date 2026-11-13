@@ -1,8 +1,12 @@
-import { adminSession } from "./google-admin.mjs";
+import { adminSession, googleConfig } from "./google-admin.mjs";
+import { emailMayAdmin } from "./admin-emails.mjs";
 import { validateCondition } from "./conditions.mjs";
 
-export function isAdmin(request) {
-  return adminSession(request) !== null;
+export async function isAdmin(request) {
+  const identity = adminSession(request);
+  if (!identity) return false;
+  try { return await emailMayAdmin(identity.email, googleConfig()); }
+  catch { return false; } // If the allowlist DB is unavailable, do not grant access.
 }
 
 export function sameOrigin(request) {
