@@ -58,18 +58,23 @@ export function readGoogleLogin(cookie, secret, state, now = Date.now()) {
 export function createGoogleAdminSession(email, sub, secret, now = Date.now()) {
   return signed({ email, sub, issued: Math.floor(now / 1000) }, secret);
 }
-export function readGoogleAdminSession(cookie, config, now = Date.now()) {
-  if (!config) return null;
+/** Verify signature and expiration independently of the mutable DB allowlist. */
+export function verifiedGoogleAdminSession(cookie, now = Date.now()) {
   const payload = unsign(cookie, requireSecret());
   if (!payload || typeof payload.email !== "string" || typeof payload.sub !== "string" ||
     !/^[0-9]{10,32}$/.test(payload.sub) || !Number.isInteger(payload.issued) ||
     Math.floor(now / 1000) - payload.issued < 0 ||
-    Math.floor(now / 1000) - payload.issued >= EIGHT_HOURS ||
-    !config.allowed.includes(payload.email.toLowerCase())) return null;
-  return { email: payload.email, sub: payload.sub };
+    Math.floor(now / 1000) - payload.issued >= EIGHT_HOURS) return null;
+  return { email: payload.email.toLowerCase(), sub: payload.sub };
+}
+export function readGoogleAdminSession(cookie, config, now = Date.now()) {
+  if (!config) return null;
+  const identity = verifiedGoogleAdminSession(cookie, now);
+  return identity && config.allowed.includes(identity.email) ? identity : null;
 }
 export function adminSession(request) {
-  return readGoogleAdminSession(request.cookies?.get(adminCookieName())?.value, googleConfig());
+  if (!googleConfig()) return null;
+  return verifiedGoogleAdminSession(request.cookies?.get(adminCookieName())?.value);
 }
 export function googleAuthUrl(config, origin, state, nonce, challenge) {
   const params = new URLSearchParams({

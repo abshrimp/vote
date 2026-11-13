@@ -11,7 +11,7 @@ const answer = (value: unknown, status = 200) =>
 
 /** Clears every vote, claim and duplicate-vote signal. Polls, candidates and settings stay. */
 export async function POST(request: NextRequest) {
-  if (!isAdmin(request)) return answer({ error: "管理者認証が必要です。" }, 401);
+  if (!(await isAdmin(request))) return answer({ error: "管理者認証が必要です。" }, 401);
   if (!sameOrigin(request)) return answer({ error: "送信元を確認してください。" }, 403);
   let body: Record<string, unknown>;
   try {

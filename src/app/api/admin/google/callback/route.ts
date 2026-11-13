@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSecret } from "@/lib/voting/security.mjs";
+import { emailMayAdmin } from "@/lib/voting/admin-emails.mjs";
 import {
   adminCookieName, oauthCookieName, googleConfig, readGoogleLogin,
   verifyGoogleIdToken, createGoogleAdminSession, ADMIN_TTL,
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
     if (!response.ok) return fail("exchange");
     const tokens = await response.json();
     const identity = await verifyGoogleIdToken(tokens.id_token, config.clientId, pending.nonce);
-    if (!config.allowed.includes(identity.email)) return fail("forbidden");
+    if (!(await emailMayAdmin(identity.email, config))) return fail("forbidden");
     const success = NextResponse.redirect(origin + "/admin");
     success.cookies.delete(oauthCookieName());
     success.cookies.set({

@@ -7,6 +7,7 @@ import Mark from "../Mark";
 import CandidateSheet from "./CandidateSheet";
 import PreviewPane from "./PreviewPane";
 import RichTextEditor from "./RichTextEditor";
+import AdminEmails from "./AdminEmails";
 import { useEditorHistory } from "./useEditorHistory";
 import { parseRich, plainText } from "@/lib/voting/richtext.mjs";
 import RichText from "../ui/RichText";
@@ -1279,6 +1280,6 @@ export default function FormStudio({ initialData, onLogout }: {
         <div><strong>公開中のアクション</strong><p>{data.actions.filter(a=>a.is_published===1).length} / {data.actions.length} 件</p></div>
         <div><strong>不正投票防止</strong><p>Turnstileと署名付きCookieによる保護を維持しています。</p></div>
       </div>
-    </section></div>}
+    </section><AdminEmails /></div>}
   </main>;
 }
