@@ -38,7 +38,7 @@ test("form settings accept only known keys and valid colours", async () => {
 test("reset clears results and duplicate-vote data but keeps the form", async () => {
   const { resetStatements, RESET_PHRASE } = await import("../src/lib/voting/reset.mjs");
   const tables = resetStatements().map(s => s.sql.replace("DELETE FROM ", ""));
-  assert.deepEqual(tables.sort(), ["action_claims", "vote_request_limits", "votes"]);
+  assert.deepEqual(tables.sort(), ["action_claims", "action_totals", "candidate_totals", "vote_request_limits", "votes"]);
   assert.ok(!tables.includes("polls") && !tables.includes("candidates") && !tables.includes("form_settings"));
   assert.equal(RESET_PHRASE, "リセット");
 });
