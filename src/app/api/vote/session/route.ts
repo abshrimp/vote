@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookieName, createSession, readSession, requireSecret } from "@/lib/voting/security.mjs";
+import { cookieName, createSession, hmac, readSession, requireSecret } from "@/lib/voting/security.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,13 +10,18 @@ export async function GET(request: NextRequest) {
     const name = cookieName();
     const current = request.cookies.get(name)?.value;
     const existing = readSession(current, secret);
-    const response = NextResponse.json({ ok: true }, {
+    const created = existing ? null : createSession(secret);
+    const sessionId = existing ?? readSession(created, secret);
+    if (!sessionId) throw Error("Failed to establish a voting session");
+    // Opaque identifier lets the browser cache only this HttpOnly cookie's state.
+    // It is not an authentication token and cannot submit votes.
+    const response = NextResponse.json({ ok: true, cacheKey: hmac(secret, "client-cache", sessionId) }, {
       headers: { "Cache-Control": "private, no-store", "Vary": "Cookie" },
     });
-    if (!existing) {
+    if (created) {
       response.cookies.set({
         name,
-        value: createSession(secret),
+        value: created,
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
