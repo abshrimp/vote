@@ -23,7 +23,7 @@ export function validRange(start, end) {
 }
 // Button wording and the optional confirmation shown when a visitor presses it.
 const TEXT_FIELDS = {
-  claim: { claimLabel: 30, usedLabel: 30, claimConfirm: 300 },
+  claim: { claimLabel: 30, lockedLabel: 30, usedLabel: 30, claimConfirm: 300 },
   link: { buttonLabel: 30, confirm: 300 },
   notice: {},
 };
