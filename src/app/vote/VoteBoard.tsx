@@ -6,6 +6,7 @@ import RichText from "../ui/RichText";
 import { textStyle, type TextStyle } from "../ui/textStyle";
 import { composeLayout } from "@/lib/voting/layout.mjs";
 import { pollVoteLimit } from "@/lib/voting/logic.mjs";
+import { claimButtonState } from "@/lib/voting/claim-button-state.mjs";
 
 export type Poll = {
   id: string;
@@ -43,7 +44,7 @@ export type LayoutBlock = {
 };
 
 export default function VoteBoard({
-  polls, actions, blocks, filters, onFilter, saving, token, siteKey, submit, claimAction, openLink,
+  polls, actions, blocks, filters, onFilter, saving, token, siteKey, verificationError, submit, claimAction, openLink,
 }: {
   polls: Poll[];
   actions: Action[];
@@ -53,6 +54,7 @@ export default function VoteBoard({
   saving: string | null;
   token: string;
   siteKey: string;
+  verificationError: boolean;
   submit: (poll: Poll, candidateId: string) => Promise<void>;
   claimAction: (action: Action) => Promise<void>;
   openLink: (action: Action) => Promise<void>;
@@ -122,6 +124,15 @@ export default function VoteBoard({
       if (item.kind === "action") {
         const action = actionMap.get(item.actionId ?? "");
         if (!action) return null;
+        const claimState = claimButtonState({
+          eligible: action.eligible,
+          hasToken: Boolean(token),
+          isSaving: saving === action.id,
+          siteKey: Boolean(siteKey),
+          verificationError,
+          claimLabel: action.config.claimLabel,
+          lockedLabel: action.config.lockedLabel,
+        });
         return <section key={item.id} data-section={item.id} className={styles.verification}>
           <article className={styles.actionItem}>
             <h2>{action.title}</h2>
@@ -133,11 +144,11 @@ export default function VoteBoard({
             </div>}
             {action.kind === "claim" ? (action.status === "used" ? null :
               <button className={styles.submit} type="button"
-                disabled={!action.eligible || !token || saving !== null}
+                disabled={!action.eligible || !token || saving !== null || verificationError}
+                aria-busy={claimState.busy}
                 onClick={() => void claimAction(action)}>
-                {saving === action.id ? "処理中…"
-                  : action.eligible ? action.config.claimLabel || "引き換える"
-                  : action.config.lockedLabel || "条件を満たすと引き換えられます"}
+                {claimState.busy && <span className={styles.buttonSpinner} aria-hidden="true" />}
+                {claimState.label}
               </button>)
               : action.kind === "link" && action.eligible && action.config.url ? (action.config.confirm
                 ? <button type="button" className={styles.actionLink} onClick={() => void openLink(action)}>
