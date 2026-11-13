@@ -15,7 +15,7 @@ test("form settings accept only known keys and valid colours", async () => {
   assert.deepEqual(cleanSettings([{ key: "headingFont", value: "zen-maru" }, { key: "bodyFont", value: "comic-sans" }]), { headingFont: "zen-maru" });
   assert.equal(SETTING_RULES.organizerName("イベント実行委員会"), true);
   assert.equal(SETTING_RULES.organizerName("x".repeat(121)), false);
-  assert.equal(SETTING_RULES.organizerName("bad\\nname"), false);
+  assert.equal(SETTING_RULES.organizerName("bad\nname"), false);
   assert.equal(SETTING_RULES.officialUrl("https://example.org/"), true);
   assert.equal(SETTING_RULES.officialUrl("javascript:alert(1)"), false);
   assert.equal(SETTING_RULES.officialUrl("https://user:pass@example.org"), false);
