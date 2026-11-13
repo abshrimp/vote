@@ -111,7 +111,7 @@ const firstId = (value: string | undefined | null) => (value ?? "").split(/[,、
 const newId = (prefix: string) => prefix + "_" + crypto.randomUUID().replaceAll("-", "");
 // New rows must exist before they are updated, removed blocks go before reordering.
 const opRank = (type: string) =>
-  ({ poll_new: 0, action_new: 0, block_new: 1, candidate_new: 2, block_delete: 4, poll_delete: 4, action_delete: 4, layout_order: 5 } as Record<string, number>)[type] ?? 3;
+  ({ poll_new: 0, action_new: 0, block_new: 1, candidate_new: 2, candidate_delete: 4, block_delete: 4, poll_delete: 4, action_delete: 4, candidate_order: 5, layout_order: 5 } as Record<string, number>)[type] ?? 3;
 /** Reads an uploaded logo. Bitmaps are scaled down to 128px so the stored setting stays small. */
 async function logoDataUrl(file: File): Promise<string> {
   const read = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -677,8 +677,15 @@ export default function FormStudio({ initialData, onLogout }: {
       .filter(row => row.name)
       .map(row => ({ id: "item_" + crypto.randomUUID().replaceAll("-", ""), row }));
     if (!created.length) return 0;
-    setPending(old => ({ ...old, ...Object.fromEntries(created.map(({ id, row }) =>
-      ["new:" + id, { type: "candidate_new", pollId: poll.id, id, name: row.name, extra: {}, columns }])) }));
+    setPending(old => {
+      const next: Record<string, Op> = { ...old, ...Object.fromEntries(created.map(({ id, row }) =>
+        ["new:" + id, { type: "candidate_new", pollId: poll.id, id, name: row.name, extra: {}, columns }])) };
+      const order = next["candidate_order:" + poll.id];
+      if (order) next["candidate_order:" + poll.id] = {
+        ...order, ids: [...(order.ids as string[]), ...created.map(({ id }) => id)],
+      };
+      return next;
+    });
     setData(d => ({ ...d, polls: d.polls.map(p => p.id === poll.id ? {
       ...p, candidates: [...p.candidates, ...created.map(({ id, row }) => ({ id, name: row.name, votes: 0, extra: {} }))],
     } : p) }));
@@ -687,6 +694,62 @@ export default function FormStudio({ initialData, onLogout }: {
     setExtraEdits(d => ({ ...d, ...Object.fromEntries(created.map(({ id, row }) => [id,
       Object.fromEntries(columns.filter(c => row[c.key]).map(c => [c.key, row[c.key]]))])) }));
     return created.length;
+  }
+
+  function reorderCandidates(poll: Poll, order: string[]) {
+    const current = poll.candidates.map(c => c.id);
+    if (order.length !== current.length || new Set(order).size !== order.length ||
+        !order.every(id => current.includes(id)) || order.every((id, i) => current[i] === id)) return;
+    const byId = new Map(poll.candidates.map(candidate => [candidate.id, candidate]));
+    setData(d => ({ ...d, polls: d.polls.map(p => p.id === poll.id
+      ? { ...p, candidates: order.map(id => byId.get(id)!) } : p) }));
+    setPending(d => ({ ...d, ["candidate_order:" + poll.id]: {
+      type: "candidate_order", pollId: poll.id, ids: order,
+    } }));
+  }
+
+  async function deleteCandidates(poll: Poll, ids: string[]): Promise<boolean> {
+    const deleted = new Set(ids);
+    const targets = poll.candidates.filter(candidate => deleted.has(candidate.id));
+    if (!targets.length) return false;
+    const votes = targets.reduce((total, candidate) => total + Number(candidate.votes), 0);
+    const message = votes
+      ? `選択した候補の投票記録（正式票 ${votes} 件を含む）も削除されます。`
+      : "選択した候補と、その候補に紐づく投票記録も削除されます。";
+    if (!await confirm({
+      title: `${targets.length}件の候補を削除しますか？`,
+      body: message + " 「保存」で確定します。保存後は元に戻せません。",
+      confirmLabel: "削除", danger: true,
+    })) return false;
+
+    setPending(previous => {
+      const next: Record<string, Op> = { ...previous };
+      const persisted: string[] = [];
+      for (const candidate of targets) {
+        if (!next["new:" + candidate.id]) persisted.push(candidate.id);
+        delete next["new:" + candidate.id];
+        delete next["candidate:" + candidate.id];
+        delete next["public_id:candidate:" + candidate.id];
+      }
+      if (persisted.length) {
+        const key = "candidate_delete:" + poll.id;
+        next[key] = { type: "candidate_delete", pollId: poll.id,
+          ids: [...new Set([ ...((next[key]?.ids as string[] | undefined) ?? []), ...persisted ])] };
+      }
+      const order = next["candidate_order:" + poll.id];
+      if (order) next["candidate_order:" + poll.id] = {
+        ...order, ids: (order.ids as string[]).filter(id => !deleted.has(id)),
+      };
+      return next;
+    });
+    setData(d => ({ ...d, polls: d.polls.map(p => p.id === poll.id
+      ? { ...p, candidates: p.candidates.filter(candidate => !deleted.has(candidate.id)) } : p) }));
+    const removeKeys = (records: Record<string, string>) =>
+      Object.fromEntries(Object.entries(records).filter(([id]) => !deleted.has(id)));
+    setCandidateEdits(removeKeys);
+    setPublicIdEdits(removeKeys);
+    setExtraEdits(records => Object.fromEntries(Object.entries(records).filter(([id]) => !deleted.has(id))));
+    return true;
   }
 
   function changeRule(index: number, rule: Rule) {
@@ -930,6 +993,8 @@ export default function FormStudio({ initialData, onLogout }: {
                   getValue={(row, key) => cellValue(poll.candidates[row], key)}
                   onChange={updates => setCells(updates.map(u => ({ id: poll.candidates[u.row].id, key: u.key, value: u.value })))}
                   onAddRows={rows => addCandidates(poll, rows)}
+                  onReorderRows={order => reorderCandidates(poll, order)}
+                  onDeleteRows={ids => deleteCandidates(poll, ids)}
                 />
               </section>
 
