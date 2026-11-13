@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
     return {
       title: { absolute: title }, description,
       alternates: { canonical: "/" }, robots: { index: false, follow: false },
-      icons: { icon: snapshot.settings.favicon ? "/api/site/icon" : "/icon.svg" },
+      icons: { icon: snapshot.settings.favicon ? "/api/site/icon" : "/default-icon.svg" },
       openGraph: { title, description, images: snapshot.settings.ogp ? [{ url: "/api/site/ogp", width: 1200, height: 630 }] : [] },
     };
   } catch {
