@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import styles from "./sheet.module.css";
+import { insertCandidates, stepCandidates } from "@/lib/voting/candidate-order.mjs";
 
 export type SheetColumn = { key: string; label: string; fontSize?: number; maxLength: number; mono?: boolean; minWidth?: number };
 export type SheetRow = { id: string; votes: number; href: string };
@@ -37,12 +38,14 @@ export function toTsv(rows: string[][]) {
 
 const clean = (value: string, max: number) => value.replace(/[\r\n\t]+/g, " ").slice(0, max);
 
-export default function CandidateSheet({ columns, rows, getValue, onChange, onAddRows, disabled }: {
+export default function CandidateSheet({ columns, rows, getValue, onChange, onAddRows, onReorderRows, onDeleteRows, disabled }: {
   columns: SheetColumn[];
   rows: SheetRow[];
   getValue: (row: number, key: string) => string;
   onChange: (updates: CellUpdate[]) => void;
   onAddRows: (rows: Record<string, string>[]) => number;
+  onReorderRows: (ids: string[]) => void;
+  onDeleteRows: (ids: string[]) => Promise<boolean>;
   disabled?: boolean;
 }) {
   const draftIndex = rows.length;
@@ -51,9 +54,57 @@ export default function CandidateSheet({ columns, rows, getValue, onChange, onAd
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState("");
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [draggedRows, setDraggedRows] = useState<string[]>([]);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const rowSelectionRef = useRef<number | null>(null);
+  const rowDragHandleRef = useRef<string | null>(null);
+  const rowNodes = useRef(new Map<string, HTMLTableRowElement>());
+  const rowMidpoints = useRef<number[]>([]);
+  const dragStartScrollTop = useRef(0);
+  const dropIndexRef = useRef<number | null>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const inputs = useRef(new Map<string, HTMLInputElement>());
   const pendingFocus = useRef<Cell | null>(null);
   const lastCol = columns.length - 1;
+  const rowOrder = rows.map(row => row.id);
+  const selectedIds = rowOrder.filter(id => selectedRows.has(id));
+  const movingSet = new Set(draggedRows);
+  const remaining = rows.filter(row => !movingSet.has(row.id));
+  const previewOrder = draggedRows.length && dropIndex !== null
+    ? insertCandidates(rowOrder, draggedRows, dropIndex) : rowOrder;
+  const dropBeforeId = dropIndex !== null ? remaining[dropIndex]?.id : null;
+  const dropAfterId = dropIndex === remaining.length ? remaining[remaining.length - 1]?.id : null;
+
+  function toggleRowSelection(id: string, index: number, checked: boolean, shift: boolean) {
+    setSelectedRows(previous => {
+      const next = new Set(previous);
+      const start = shift ? rowSelectionRef.current : null;
+      if (start !== null) {
+        for (let i = Math.min(start, index); i <= Math.max(start, index); i++) {
+          if (checked) next.add(rows[i].id);
+          else next.delete(rows[i].id);
+        }
+      } else if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    rowSelectionRef.current = index;
+  }
+
+  function moveSelected(direction: -1 | 1) {
+    if (disabled || !selectedIds.length) return;
+    const next = stepCandidates(rowOrder, selectedIds, direction);
+    if (next.some((id, index) => id !== rowOrder[index])) onReorderRows(next);
+  }
+
+  function clearRowDrag() {
+    setDraggedRows([]);
+    setDropIndex(null);
+    dropIndexRef.current = null;
+    rowDragHandleRef.current = null;
+    rowMidpoints.current = [];
+  }
 
   const range = anchor && focus ? {
     r0: Math.min(anchor.r, focus.r), r1: Math.max(anchor.r, focus.r),
@@ -240,12 +291,49 @@ export default function CandidateSheet({ columns, rows, getValue, onChange, onAd
   ].join(" ");
 
   return <div className={styles.wrap}>
-    <div className={styles.scroller}>
-      <table className={dragging && multi ? `${styles.sheet} ${styles.noSelect}` : styles.sheet}
+    <div className={styles.rowToolbar}>
+      <span aria-live="polite">{selectedIds.length ? selectedIds.length + "件選択中" : rows.length + "件の候補"}</span>
+      <div className={styles.rowActions}>
+        <button type="button" disabled={disabled || !selectedIds.length}
+          onClick={() => moveSelected(-1)}>上へ</button>
+        <button type="button" disabled={disabled || !selectedIds.length}
+          onClick={() => moveSelected(1)}>下へ</button>
+        <button type="button" className={styles.deleteAction} disabled={disabled || !selectedIds.length}
+          onClick={() => void (async () => {
+            if (await onDeleteRows(selectedIds)) setSelectedRows(new Set());
+          })()}>選択した候補を削除</button>
+      </div>
+    </div>
+    <div className={styles.scroller} ref={scrollerRef}
+      onDragOver={event => {
+        if (!draggedRows.length) return;
+        event.stopPropagation();
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        const y = event.clientY + (event.currentTarget.scrollTop - dragStartScrollTop.current);
+        const next = rowMidpoints.current.filter(midpoint => y > midpoint).length;
+        dropIndexRef.current = next;
+        setDropIndex(current => current === next ? current : next);
+      }}
+      onDrop={event => {
+        if (!draggedRows.length) return;
+        event.stopPropagation();
+        event.preventDefault();
+        const next = insertCandidates(rowOrder, draggedRows, dropIndexRef.current ?? 0);
+        if (next.some((id, i) => id !== rowOrder[i])) onReorderRows(next);
+        clearRowDrag();
+      }}>
+      <table className={[styles.sheet, dragging && multi ? styles.noSelect : "", draggedRows.length ? styles.sortingRows : ""].join(" ")}
         onCopy={e => onCopy(e)} onCut={e => onCopy(e, true)} onPaste={onPaste}>
         <thead>
           <tr>
             <th className={styles.corner} aria-hidden="true" />
+            <th className={styles.selectHead} scope="col">
+              <input type="checkbox" aria-label="候補をすべて選択" disabled={disabled || !rows.length}
+                checked={rows.length > 0 && selectedIds.length === rows.length}
+                onChange={event => setSelectedRows(new Set(event.target.checked ? rowOrder : []))}/>
+            </th>
+            <th className={styles.dragHead} scope="col"><span className={styles.visuallyHidden}>並び替え</span></th>
             {columns.map((column, c) => <th key={column.key} scope="col" style={{ minWidth: column.minWidth ?? 160 }}
               className={range && c >= range.c0 && c <= range.c1 ? styles.headActive : undefined}
               onMouseDown={event => {
@@ -259,7 +347,56 @@ export default function CandidateSheet({ columns, rows, getValue, onChange, onAd
           </tr>
         </thead>
         <tbody>
-          {[...rows, null].map((row, r) => <tr key={row?.id ?? "draft"} className={row ? undefined : styles.draftRow}
+          {[...rows, null].map((row, r) => <tr key={row?.id ?? "draft"}
+            ref={node => {
+              if (!row) return;
+              if (node) rowNodes.current.set(row.id, node);
+              else rowNodes.current.delete(row.id);
+            }}
+            className={[
+              !row ? styles.draftRow : "",
+              row && movingSet.has(row.id) ? styles.dragSource : "",
+              row && row.id === dropBeforeId ? styles.dropBefore : "",
+              row && row.id === dropAfterId ? styles.dropAfter : "",
+            ].filter(Boolean).join(" ")}
+            style={row && draggedRows.length && !movingSet.has(row.id)
+              ? { transform: `translateY(${(previewOrder.indexOf(row.id) - r) * 36}px)` }
+              : undefined}
+            draggable={false}
+            onPointerDownCapture={event => {
+              if (!row) return;
+              const handle = (event.target as Element).closest("[data-candidate-drag-handle]");
+              rowDragHandleRef.current = handle ? row.id : null;
+              event.currentTarget.draggable = Boolean(handle);
+            }}
+            onPointerUpCapture={event => { event.currentTarget.draggable = false; }}
+            onPointerCancelCapture={event => { event.currentTarget.draggable = false; }}
+            onDragStart={event => {
+              event.stopPropagation(); // Do not start the parent section-card drag.
+              if (!row || disabled || rowDragHandleRef.current !== row.id) {
+                event.preventDefault();
+                return;
+              }
+              const moving = selectedRows.has(row.id) ? selectedIds : [row.id];
+              const chosen = new Set(moving);
+              rowMidpoints.current = rows.filter(candidate => !chosen.has(candidate.id))
+                .map(candidate => {
+                  const rect = rowNodes.current.get(candidate.id)?.getBoundingClientRect();
+                  return rect ? rect.top + rect.height / 2 : Infinity;
+                });
+              dragStartScrollTop.current = scrollerRef.current?.scrollTop ?? 0;
+              const insertion = rows.slice(0, r).filter(candidate => !chosen.has(candidate.id)).length;
+              dropIndexRef.current = insertion;
+              setDropIndex(insertion);
+              setDraggedRows(moving);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", row.id);
+            }}
+            onDragEnd={event => {
+              event.stopPropagation();
+              event.currentTarget.draggable = false;
+              clearRowDrag();
+            }}
             onBlur={event => {
               if (row || event.currentTarget.contains(event.relatedTarget as Node)) return;
               commitDraft();
@@ -271,6 +408,30 @@ export default function CandidateSheet({ columns, rows, getValue, onChange, onAd
                 setFocus({ r, c: lastCol });
                 inputs.current.get(r + ":0")?.focus({ preventScroll: true });
               }}>{row ? r + 1 : "+"}</th>
+            <td className={styles.selectCell}>
+              {row && <input type="checkbox" aria-label={(r + 1) + "行目の候補を選択"}
+                checked={selectedRows.has(row.id)} disabled={disabled}
+                onChange={event => toggleRowSelection(row.id, r, event.target.checked,
+                  (event.nativeEvent as MouseEvent).shiftKey ?? false)} />}
+            </td>
+            <td className={styles.dragCell}>
+              {row && <button type="button" className={styles.rowDragHandle} disabled={disabled}
+                data-candidate-drag-handle
+                aria-label={(r + 1) + "行目の候補をドラッグして並び替え"}
+                title="ドラッグで並び替え・Alt+上下で移動"
+                onKeyDown={event => {
+                  if (!event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+                  event.preventDefault();
+                  const moving = selectedRows.has(row.id) ? selectedIds : [row.id];
+                  onReorderRows(stepCandidates(rowOrder, moving, event.key === "ArrowUp" ? -1 : 1));
+                }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                  <circle cx="9" cy="5" r="1.6"/><circle cx="15" cy="5" r="1.6"/>
+                  <circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/>
+                  <circle cx="9" cy="19" r="1.6"/><circle cx="15" cy="19" r="1.6"/>
+                </svg>
+              </button>}
+            </td>
             {columns.map((column, c) => <td key={column.key} className={cellClass(r, c)}
               onMouseDown={event => {
                 if (event.shiftKey && anchor) {
@@ -320,7 +481,7 @@ export default function CandidateSheet({ columns, rows, getValue, onChange, onAd
       </table>
     </div>
     <p className={styles.status} aria-live="polite">
-      {status || "スプレッドシートからコピーして貼り付けられます。ドラッグや Shift+クリックで範囲を選択し、コピーもできます。"}
+      {status || "セルはドラッグや Shift+クリックで範囲選択できます。候補の複数選択はチェックボックスを使い、左のハンドルから並び替えられます。"}
     </p>
   </div>;
 }
