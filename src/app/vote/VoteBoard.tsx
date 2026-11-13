@@ -92,7 +92,7 @@ export default function VoteBoard({
             </span>}
           </div>
           {limit === 0 && <p className={styles.description}>現在投票できる候補はありません。</p>}
-          {poll.conditionIds.length > 0 && <p className={styles.description}>この端末では既に投票済みの可能性があります。この部門は追加投票できません。条件判定には反映されています。</p>}
+          {poll.conditionIds.length > 0 && <p className={styles.description}>この端末では既に投票済みの可能性があります。この部門は追加投票できません。</p>}
           {poll.candidates.length > 15 && <input className={styles.candidateSearch}
             type="search" placeholder="候補名で検索" aria-label={poll.title+"の候補を検索"}
             value={filters.get(poll.id) ?? ""} onChange={event => onFilter(poll.id, event.target.value)}/>}
