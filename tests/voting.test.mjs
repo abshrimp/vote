@@ -74,7 +74,7 @@ test("one atomic statement classifies strict duplicates without follow-up writes
   assert.ok(block.sql.includes("v.is_official=1"));
   assert.ok(block.sql.includes("p.max_votes"));
   assert.ok(!block.sql.includes("condition_votes"));
-  assert.equal((block.sql.match(/\\?/g) ?? []).length, block.args.length);
+  assert.equal((block.sql.match(/\?/g) ?? []).length, block.args.length);
 });
 
 test("poll grouping preserves candidate order and vote status", () => {
@@ -150,7 +150,7 @@ test("conditional actions validate an explicit and/or rule language", async () =
   assert.ok(compiled.sql.includes("COUNT(DISTINCT poll_id)"));
   assert.ok(compiled.sql.includes(" OR "));
   assert.ok(compiled.sql.includes("WITH progress AS MATERIALIZED"));
-  assert.equal((compiled.sql.match(/\\?/g) ?? []).length, compiled.args.length);
+  assert.equal((compiled.sql.match(/\?/g) ?? []).length, compiled.args.length);
   const claim = claimStatement({
     id: "prize", condition_json: JSON.stringify(rule),
   }, "voter-key", "f".repeat(32), "2026-11-13T00:00:00.000Z");
