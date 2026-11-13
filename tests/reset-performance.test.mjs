@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { splitStatements } from "../scripts/setup-db.mjs";
 import { resetStatements } from "../src/lib/voting/reset.mjs";
+import { deletePollStatements, deleteActionStatements } from "../src/lib/voting/delete-statements.mjs";
 
 test("reset avoids counter-update amplification without changing any results", async t => {
   let DatabaseSync;
@@ -50,4 +51,43 @@ test("reset avoids counter-update amplification without changing any results", a
   optimized.exec("INSERT INTO action_claims(action_id,voter_hash) VALUES('reward','fresh')");
   assert.equal(optimized.prepare("SELECT total FROM candidate_totals").get().total, 1);
   assert.equal(optimized.prepare("SELECT total FROM action_totals").get().total, 1);
+});
+
+test("poll/action deletion leaves other data intact and clears counters first", async t => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import("node:sqlite")); }
+  catch { t.skip("node:sqlite is unavailable"); return; }
+  const db = new DatabaseSync(":memory:");
+  t.after(() => db.close());
+  const schema = splitStatements(readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8"));
+  for (const statement of schema) db.exec(statement);
+  db.exec("INSERT INTO polls(id,title,starts_at,ends_at) VALUES " +
+    "('remove','Old','2026-01-01T00:00:00.000Z','2027-01-01T00:00:00.000Z')," +
+    "('keep','Other','2026-01-01T00:00:00.000Z','2027-01-01T00:00:00.000Z')");
+  db.exec("INSERT INTO candidates(poll_id,id,name) VALUES " +
+    "('remove','a','A'),('keep','b','B')");
+  db.exec("INSERT INTO votes(poll_id,voter_hash,candidate_id) VALUES " +
+    "('remove','v1','a'),('remove','v2','a'),('keep','v1','b')");
+  db.exec("INSERT INTO actions(id,title,kind,condition_json,starts_at,ends_at) VALUES " +
+    "('remove_action','X','claim','{\"type\":\"min_total_votes\",\"count\":1}'," +
+    "'2026-01-01T00:00:00.000Z','2027-01-01T00:00:00.000Z')," +
+    "('keep_action','Y','claim','{\"type\":\"min_total_votes\",\"count\":1}'," +
+    "'2026-01-01T00:00:00.000Z','2027-01-01T00:00:00.000Z')");
+  db.exec("INSERT INTO action_claims(action_id,voter_hash) VALUES " +
+    "('remove_action','v1'),('remove_action','v2'),('keep_action','v1')");
+  const execute = actions => {
+    db.exec("BEGIN");
+    for (const { sql, args } of actions) db.prepare(sql).run(...args);
+    db.exec("COMMIT");
+  };
+  execute(deletePollStatements("remove"));
+  execute(deleteActionStatements("remove_action"));
+  for (const [table, where] of [
+    ["polls", "id='remove'"], ["candidates", "poll_id='remove'"],
+    ["votes", "poll_id='remove'"], ["candidate_totals", "poll_id='remove'"],
+    ["actions", "id='remove_action'"], ["action_claims", "action_id='remove_action'"],
+    ["action_totals", "action_id='remove_action'"],
+  ]) assert.equal(db.prepare("SELECT COUNT(*) AS count FROM " + table + " WHERE " + where).get().count, 0);
+  assert.equal(db.prepare("SELECT total FROM candidate_totals WHERE poll_id='keep'").get().total, 1);
+  assert.equal(db.prepare("SELECT total FROM action_totals WHERE action_id='keep_action'").get().total, 1);
 });
