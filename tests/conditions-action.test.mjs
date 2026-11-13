@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validateCondition, conditionSql } from "../src/lib/voting/conditions.mjs";
+import { validateCondition, conditionSql, referencesUsedAction } from "../src/lib/voting/conditions.mjs";
 
 test("action status conditions reference only parameterized identifiers", () => {
   const condition = {type:"all",rules:[
@@ -12,6 +12,20 @@ test("action status conditions reference only parameterized identifiers", () => 
   assert.ok(statement.sql.includes("FROM action_claims"));
   assert.ok(!statement.sql.includes("status = 'used'"));
   assert.deepEqual(statement.args,["voter-hash","prize_1","voter-hash","prize_2"]);
+});
+
+test("claim refresh is needed only for actions referencing the redeemed entitlement", () => {
+  const voteOnly = { type: "all", rules: [
+    { type: "min_total_votes", count: 2 },
+    { type: "voted_poll", pollId: "food" },
+  ] };
+  assert.equal(referencesUsedAction(voteOnly, "gift"), false);
+  const nested = { type: "any", rules: [
+    voteOnly,
+    { type: "all", rules: [{ type: "action_used", actionId: "gift" }] },
+  ] };
+  assert.equal(referencesUsedAction(nested, "gift"), true);
+  assert.equal(referencesUsedAction(nested, "other"), false);
 });
 
 test("action condition rejects dangerous identifiers", () => {
