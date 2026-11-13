@@ -21,7 +21,7 @@ function id() {
 const bool = (value: unknown) => value === true ? 1 : 0;
 
 export async function GET(request: NextRequest) {
-  if (!isAdmin(request)) return response({ error: "認証が必要です。" }, 401);
+  if (!(await isAdmin(request))) return response({ error: "認証が必要です。" }, 401);
   try {
     // All independent SELECTs share one Turso HTTP request.
     const [polls, candidates, actions, claims] = await readBatch([
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAdmin(request)) return response({ error: "認証が必要です。" }, 401);
+  if (!(await isAdmin(request))) return response({ error: "認証が必要です。" }, 401);
   if (!sameOrigin(request)) return response({ error: "不正な送信元です。" }, 403);
   let body: Record<string, unknown>;
   try {
