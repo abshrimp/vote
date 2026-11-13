@@ -881,6 +881,33 @@ label.settingRow { cursor: pointer; }
   font-weight: 500;
   margin-bottom: 16px;
 }
+.resultsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+}
+.resultsHeader h2 { margin-bottom: 0; }
+.resultsSort {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.resultsSort select {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
