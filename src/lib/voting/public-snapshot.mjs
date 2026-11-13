@@ -37,7 +37,9 @@ async function loadPublicSnapshot() {
         "is_published FROM page_blocks ORDER BY sort_order,id",
     },
     // Favicon and OGP are served independently; never load them for page JSON.
-    { sql: "SELECT key,value FROM form_settings WHERE key NOT IN ('favicon','ogp')" },
+    { sql: "SELECT key,value FROM form_settings WHERE key IN (" +
+      "'themeColor','accentColor','highlightColor','textColor','backgroundColor'," +
+      "'logo','headingFont','bodyFont','organizerName','officialUrl','contactEmail')" },
   ]);
   return { pollRows: polls.rows, blocks: layout.rows, settings: cleanSettings(settings.rows) };
 }
