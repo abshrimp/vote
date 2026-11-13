@@ -4,14 +4,14 @@ import styles from "./vote.module.css";
 export default function PrivacyPolicy({ organizerName, contactEmail }: { organizerName?: string; contactEmail?: string }) {
   return <div className={styles.policy}>
     <p>
-      {organizerName || "本投票ページの運営者"}は、この投票ページ（以下「本サービス」）において、公正な投票を実施するために以下の情報を取り扱います。
+      {organizerName || "本投票ページの運営者"}は、この投票ページにおいて、公正な投票を実施するために以下の情報を取り扱います。
     </p>
 
     <h3>取得する情報</h3>
     <ul>
       <li><strong>投票用Cookie</strong>：ランダムに生成した識別子です。</li>
-      <li><strong>IPアドレスのハッシュ値</strong>：元の値がわからないよう変換したIPアドレスです。</li>
-      <li><strong>端末情報のハッシュ値</strong>：画面サイズや言語などの環境情報をもとに生成した値です。</li>
+      <li><strong>IPアドレスのハッシュ値</strong>：IPアドレスを、元の値がわからないように変換した値です。</li>
+      <li><strong>端末情報のハッシュ値</strong>：言語設定などの環境情報を、元の値がわからないように変換した値です。</li>
       <li><strong>投票・引換権の記録</strong>：投票した部門と候補、権利の取得日時と使用状況です。</li>
     </ul>
     <p>氏名・メールアドレスなど、個人を直接特定する情報は取得しません。</p>
@@ -19,7 +19,7 @@ export default function PrivacyPolicy({ organizerName, contactEmail }: { organiz
     <h3>利用目的</h3>
     <ul>
       <li>同一ブラウザ、またはIPとブラウザ環境が一致する投票の重複を検出・制限するため</li>
-      <li>Cookieを削除しても繰り返される大量の送信を制限するため</li>
+      <li>大量の送信を制限するため</li>
       <li>不審な投票を検出・監視するため（別人を誤判定する可能性もあります）</li>
       <li>投票結果の集計と、権利の発行・使用状況の管理のため</li>
     </ul>
