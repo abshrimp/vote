@@ -269,8 +269,12 @@
 }
 .formHeader {
   padding: 30px 24px 16px;
-  overflow: hidden;
+  overflow: visible; /* The rich text style toolbar and its badges must not be clipped. */
 }
+.purpleLine { border-radius: 8px 8px 0 0; }
+.draggingCard { opacity: .45; }
+.dragHandle { cursor: grab; user-select: none; touch-action: none; }
+.dragHandle:active { cursor: grabbing; }
 .purpleLine {
   position: absolute;
   inset: 0 0 auto;
