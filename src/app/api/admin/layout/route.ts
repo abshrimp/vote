@@ -23,6 +23,9 @@ async function list() {
 export async function GET(request: NextRequest) {
   if (!isAdmin(request)) return answer({ error: "認証が必要です。" }, 401);
   try {
+    if (request.nextUrl.searchParams.get("blocksOnly") === "1") {
+      return answer({ blocks: (await list()).rows });
+    }
     return answer({ blocks: (await list()).rows, settings: await readSettings() });
   } catch {
     return answer({ error: "ページ構成を取得できません。新規DBの初期化を確認してください。" }, 503);
