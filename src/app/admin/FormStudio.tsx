@@ -824,17 +824,27 @@ export default function FormStudio({ initialData, onLogout }: {
           const block = item.block;
           return <section key={item.id} id={"item-" + item.id}
             className={`${active ? styles.activeCard : styles.questionCard} ${draggedId === item.id ? styles.draggingCard : ""}`}
-            draggable
+            draggable={false}
             onPointerDownCapture={e => {
-              dragHandleRef.current = (e.target as Element).closest("[data-drag-handle]") ? item.id : null;
+              const handle = (e.target as Element).closest("[data-drag-handle]");
+              dragHandleRef.current = handle ? item.id : null;
+              // Only arm native HTML drag when the pointer starts on the handle.
+              // Inputs and rich text remain freely selectable/editable.
+              e.currentTarget.draggable = Boolean(handle);
             }}
+            onPointerUpCapture={e => { e.currentTarget.draggable = false; }}
+            onPointerCancelCapture={e => { e.currentTarget.draggable = false; }}
             onDragStart={e => {
               if (dragHandleRef.current !== item.id) { e.preventDefault(); return; }
               e.dataTransfer.effectAllowed = "move";
               e.dataTransfer.setData("text/plain", item.id);
               setDraggedId(item.id);
             }}
-            onDragEnd={() => { setDraggedId(null); dragHandleRef.current = null; }}
+            onDragEnd={e => {
+              e.currentTarget.draggable = false;
+              setDraggedId(null);
+              dragHandleRef.current = null;
+            }}
             onDragOver={e => { if (draggedId && draggedId !== item.id) e.preventDefault(); }}
             onDrop={e => { e.preventDefault(); dropSection(item); setDraggedId(null); }}
             onClick={() => { if (!active) select(item); }}>
