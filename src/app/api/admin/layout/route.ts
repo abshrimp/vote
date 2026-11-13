@@ -21,7 +21,7 @@ async function list() {
 }
 
 export async function GET(request: NextRequest) {
-  if (!isAdmin(request)) return answer({ error: "認証が必要です。" }, 401);
+  if (!(await isAdmin(request))) return answer({ error: "認証が必要です。" }, 401);
   try {
     if (request.nextUrl.searchParams.get("blocksOnly") === "1") {
       return answer({ blocks: (await list()).rows });
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAdmin(request)) return answer({ error: "認証が必要です。" }, 401);
+  if (!(await isAdmin(request))) return answer({ error: "認証が必要です。" }, 401);
   if (!sameOrigin(request)) return answer({ error: "送信元を確認してください。" }, 403);
   let data: Record<string, unknown>;
   try {
