@@ -477,6 +477,18 @@
   background: #ece7e1;
   color: var(--ink-3);
 }
+.buttonSpinner {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: buttonSpin .75s linear infinite;
+}
+@keyframes buttonSpin { to { transform: rotate(360deg); } }
 
 /* Keep the widget mounted while Cloudflare runs a background challenge. */
 .turnstileArea { margin: 16px 0 0; padding: 0; }
