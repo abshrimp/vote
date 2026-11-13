@@ -20,6 +20,11 @@ test("admin action kinds are constrained and HTTPS links are validated", () => {
   // Button wording and confirmation messages.
   assert.equal(validateAction("claim", condition, { claimLabel: "もらう", claimConfirm: "委員が押してください" }), true);
   assert.equal(validateAction("claim", condition, { claimLabel: "x".repeat(31) }), false);
+  assert.equal(validateAction("claim", condition, { lockedLabel: "あと1部門の投票が必要です" }), true);
+  assert.equal(validateAction("claim", condition, { lockedLabel: "x".repeat(31) }), false);
+  assert.equal(validateAction("claim", condition, { lockedLabel: 123 }), false);
+  assert.deepEqual(actionConfig("claim", { lockedLabel: " 条件を満たしてください " }),
+    { lockedLabel: "条件を満たしてください" });
   assert.equal(validateAction("claim", condition, { claimConfirm: 3 }), false);
   assert.deepEqual(actionConfig("claim", { claimLabel: " もらう ", claimConfirm: "委員が押してください", url: "https://x.example/" }),
     { claimLabel: "もらう", claimConfirm: "委員が押してください" });
