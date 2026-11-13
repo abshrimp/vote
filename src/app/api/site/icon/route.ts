@@ -1,10 +1,12 @@
+import { withPublicEdgeCache } from "@/lib/voting/edge-cache";
 import { NextResponse } from "next/server";
 import { siteImage } from "@/lib/voting/public-snapshot.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  return withPublicEdgeCache(request, async () => {
   try {
     const image = await siteImage("favicon");
     if (!image || !image.startsWith("data:image/x-icon;base64,")) {
@@ -17,4 +19,5 @@ export async function GET() {
   } catch {
     return new NextResponse(null, { status: 503 });
   }
+  });
 }
