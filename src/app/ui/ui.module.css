@@ -1,0 +1,148 @@
+/* ───────── Dialog (Material 3 basic dialog) ───────── */
+.dialog {
+  width: min(400px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 28px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 4px 8px 3px rgba(0, 0, 0, .12), 0 1px 3px rgba(0, 0, 0, .2);
+  overflow: hidden;
+}
+.dialogLarge { width: min(640px, calc(100vw - 32px)); }
+.dialog:focus { outline: none; }
+.dialog[open] { animation: dialogIn .2s cubic-bezier(.2, 0, 0, 1); }
+.dialog::backdrop {
+  background: rgba(30, 22, 18, .4);
+  animation: fadeIn .2s ease-out;
+}
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(8px) scale(.97); }
+}
+@keyframes fadeIn { from { opacity: 0; } }
+.dialog.closing { animation: dialogOut .14s ease-in both; }
+.dialog.closing::backdrop { animation: fadeOut .14s ease-in both; }
+@keyframes dialogOut { to { opacity: 0; transform: translateY(4px) scale(.98); } }
+@keyframes fadeOut { to { opacity: 0; } }
+.dialogInner {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 48px);
+  padding: 24px;
+}
+.dialogHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.dialogTitle {
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.35;
+}
+.closeButton {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  margin: -8px -8px 0 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+}
+.closeButton:hover { background: #f1ece6; }
+.dialogBody {
+  margin-top: 16px;
+  overflow-y: auto;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.75;
+  overscroll-behavior: contain;
+}
+.dialogBody:focus,
+.dialogBody:focus-visible { outline: none; }
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+.textButton {
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color .15s;
+}
+.textButton:hover { background: var(--green-container); }
+.danger { color: var(--error); }
+.danger:hover { background: #fcefee; }
+
+@media (max-width: 520px) {
+  .dialogLarge {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: 28px 28px 0 0;
+  }
+  .dialogLarge[open] { animation: sheetIn .25s cubic-bezier(.2, 0, 0, 1); }
+  .dialogLarge .dialogInner { max-height: 92dvh; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  @keyframes sheetIn { from { transform: translateY(40%); opacity: 0; } }
+}
+
+/* ───────── Snackbar ───────── */
+.snackbarRegion {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: 50;
+  transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.snackbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  padding: 6px 8px 6px 16px;
+  border-radius: 4px;
+  background: #322823;
+  color: #f4eee8;
+  font-size: 14px;
+  line-height: 1.45;
+  box-shadow: 0 3px 5px -1px rgba(0, 0, 0, .2), 0 6px 10px rgba(0, 0, 0, .14);
+  pointer-events: auto;
+  animation: snackIn .2s cubic-bezier(.2, 0, 0, 1);
+}
+.snackbar button {
+  flex-shrink: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--green) 40%, white);
+  font-size: 14px;
+  font-weight: 500;
+}
+.snackbar button:hover { background: rgba(255, 255, 255, .08); }
+@keyframes snackIn { from { opacity: 0; transform: translateY(12px); } }
+
+/* ───────── Rich text (descriptions) ───────── */
+.rich ul,
+.rich ol { margin: .3em 0; padding-left: 1.5em; }
+.rich li { margin: .1em 0; }
+.rich li::marker { color: var(--ink-3); }
+.rich a { color: var(--green); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.rich a:hover { text-decoration-thickness: 2px; }

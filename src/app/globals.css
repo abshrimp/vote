@@ -1,0 +1,77 @@
+:root {
+  /* Theme */
+  --green: #4a743d;
+  --green-hover: #3e6333;
+  --green-container: #e6eedf;
+  --on-green-container: #20361a;
+  --gold: #d0a266;
+  --cream: #f7ead5;
+  --brown: #60473e;
+
+  /* Neutrals (warm, derived from the brown) */
+  --ink: #2b211d;
+  --ink-2: #5c4e47;
+  --ink-3: #8a7b73;
+  --line: #e7e0d8;
+  --line-strong: #d3c9bf;
+  --surface: #ffffff;
+  --bg: #faf7f2;
+  --error: #b3261e;
+
+  font-family: "Google Sans Text", "Google Sans", Roboto, "Noto Sans JP",
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light;
+}
+* {
+  box-sizing: border-box;
+}
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+body {
+  background: var(--bg);
+  color: var(--ink);
+  line-height: 1.5;
+}
+h1, h2, h3, p {
+  margin: 0;
+}
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+a {
+  color: inherit;
+}
+::selection {
+  background: var(--cream);
+}
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
+/* Honour the OS "reduce motion" setting everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

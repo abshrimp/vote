@@ -1,0 +1,612 @@
+/* ───────── Page shell ───────── */
+.main {
+  font-family: var(--font-body, inherit);
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  padding-bottom: 0;
+}
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px;
+  background: rgba(255, 255, 255, .92);
+  backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.mark {
+  width: auto;
+  max-width: 40px;
+  height: 28px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.appbarTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  letter-spacing: .01em;
+}
+.appbarSpacer { flex: 1; }
+.appbarIcon {
+  width: 40px;
+  height: 40px;
+  margin-left: -8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+  transition: background-color .15s;
+}
+.appbarIcon:hover { background: #f1ece6; color: var(--ink); }
+.homeLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px 0 12px;
+  border-radius: 999px;
+  background: var(--green-container);
+  color: var(--on-green-container);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color .15s;
+}
+.homeLink:hover { background: color-mix(in srgb, var(--green) 22%, white); }
+.appbarProgress {
+  margin-right: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.progressTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  background: transparent;
+  overflow: hidden;
+}
+.progressBar {
+  height: 100%;
+  background: var(--green);
+  transform-origin: left center;
+  transition: transform .5s cubic-bezier(.2, 0, 0, 1);
+}
+.container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ───────── Hero ───────── */
+.header {
+  padding: 40px 4px 28px;
+}
+.header h1 {
+  font-size: clamp(28px, 6vw, 36px);
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -.005em;
+  margin-bottom: 10px;
+}
+.header p,
+.lead {
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+/* ───────── States ───────── */
+.error {
+  color: var(--error);
+  font-size: 14px;
+  line-height: 1.7;
+  background: #fcefee;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 56px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 15px;
+}
+.empty p { color: var(--ink-2); }
+
+/* Skeleton */
+.skeletonCard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.skeletonTitle,
+.skeletonLine,
+.skeletonRow span {
+  display: block;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #f1ebe3 0%, #f8f4ee 40%, #f1ebe3 80%) 0 0 / 300% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+.skeletonTitle { width: 42%; height: 20px; border-radius: 10px; }
+.skeletonHeading { width: 55%; height: 36px; margin-bottom: 14px; border-radius: 12px; }
+.skeletonLine { width: 68%; margin-bottom: 8px; }
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  border-top: 1px solid var(--line);
+}
+.skeletonRow span:first-child { width: 36%; }
+.skeletonRow span:last-child { width: 84px; height: 36px; border-radius: 18px; }
+@keyframes shimmer { to { background-position: -300% 0; } }
+
+/* ───────── Layout blocks ───────── */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.layoutHeading {
+  padding: 28px 4px 4px;
+}
+.layoutHeading:first-child {
+  padding-top: 0;
+}
+.layoutHeading h2 {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.layoutHeading .blockBody {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+.blockBody {
+  white-space: pre-wrap;
+  line-height: 1.8;
+}
+.layoutText {
+  padding: 20px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.layoutText h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+/* ───────── Poll card ───────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px 24px 12px;
+  scroll-margin-top: 80px;
+}
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.card h2 {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.description {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.counter {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.counterDone {
+  color: var(--on-green-container);
+  background: var(--green-container);
+  border-color: transparent;
+}
+.candidateSearch {
+  width: 100%;
+  height: 44px;
+  margin: 18px 0 4px;
+  padding: 0 16px 0 44px;
+  border: 0;
+  border-radius: 999px;
+  background: #f3efe9 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%238a7b73'%3E%3Cpath d='M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'/%3E%3C/svg%3E") no-repeat 14px center / 20px;
+  font-size: 14px;
+  outline: none;
+  transition: background-color .15s, box-shadow .15s;
+}
+.candidateSearch:focus {
+  background-color: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong), 0 1px 3px rgba(60, 40, 30, .08);
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+  margin: 12px -12px 0;
+}
+.candidateVote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 60px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  scroll-margin-top: 100px;
+  transition: background-color .15s;
+}
+.candidateVote { position: relative; }
+.candidateVote + .candidateVote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: var(--line);
+}
+.candidateVote:hover {
+  background: #faf6f0;
+}
+.candidateVote:hover::before,
+.candidateVote:hover + .candidateVote::before,
+.candidateVote:target::before,
+.candidateVote:target + .candidateVote::before {
+  display: none;
+}
+.candidateVote:target {
+  background: var(--cream);
+}
+.candidateDetails {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+}
+.candidateName {
+  font-size: 15px;
+  line-height: 1.5;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.candidateExtra {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.extraLabel {
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--ink-3);
+  font-size: .85em;
+}
+.candidateButton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--green);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color .15s, border-color .15s, color .15s;
+}
+.candidateButton:not(:disabled):hover {
+  background: var(--green-container);
+  border-color: var(--green-container);
+}
+.candidateButton:not(:disabled):active {
+  background: color-mix(in srgb, var(--green) 24%, white);
+}
+.candidateButton:disabled {
+  color: var(--ink-3);
+  border-color: var(--line);
+  background: transparent;
+}
+.candidateButton.voted,
+.candidateButton.voted:disabled {
+  color: var(--on-green-container);
+  background: var(--green-container);
+  border-color: transparent;
+}
+.candidateButton svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ───────── Action card ───────── */
+.verification {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px;
+  overflow: hidden;
+  position: relative;
+}
+.verification::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: var(--gold);
+}
+.actionItem h2 {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.45;
+  margin-bottom: 6px;
+}
+.actionItem > p,
+.actionText {
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+.actionItem > p + p {
+  margin-top: 8px;
+}
+.claimStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--cream);
+  color: var(--brown);
+}
+.claimState {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.claimState::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+}
+.claimUsed { background: #efebe6; }
+.claimUsed .claimState::before { background: var(--ink-3); }
+.claimStatus dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 10px;
+  margin: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.claimStatus dt { color: var(--ink-3); }
+.claimStatus dd { margin: 0; color: var(--ink-2); }
+.actionHint {
+  margin-top: 16px;
+  font-size: 13px !important;
+  color: var(--ink-3) !important;
+}
+.submit,
+.actionLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  margin-top: 20px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--green);
+  color: var(--on-green, #fff);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background-color .15s, box-shadow .15s;
+}
+.submit:not(:disabled):hover,
+.actionLink:hover {
+  background: var(--green-hover);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .2), 0 1px 3px 1px rgba(0, 0, 0, .1);
+}
+.submit:disabled {
+  background: #ece7e1;
+  color: var(--ink-3);
+}
+
+/* Managed Turnstile runs in the background and displays only when it needs interaction. */
+.turnstileArea { margin: 16px 0 0; padding: 0; }
+.turnstileWidget { max-width: 100%; }
+
+/* ───────── Footer ───────── */
+.footer {
+  max-width: 680px;
+  margin: 48px auto 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.footerLink {
+  height: 32px;
+  padding: 0 12px;
+  margin-right: -12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background-color .15s, color .15s;
+}
+.footerLink:hover { background: #f1ece6; color: var(--ink); }
+
+/* Privacy policy (inside dialog) */
+.policy { color: var(--ink-2); }
+.policy h3 {
+  margin: 24px 0 8px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.policy ul {
+  margin: 0;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 6px;
+}
+.policy li::marker { color: var(--gold); }
+.policy strong { font-weight: 500; color: var(--ink); }
+.policy p + p,
+.policy ul + p { margin-top: 10px; }
+
+@media (max-width: 520px) {
+  .appbar { padding: 0 8px 0 12px; gap: 8px; }
+  .appbarIcon { margin-left: -4px; }
+  .homeLink { width: 36px; padding: 0; justify-content: center; }
+  .homeLink span { display: none; }
+  .appbarProgress { margin-right: 4px; font-size: 12px; }
+  .header { padding: 28px 2px 20px; }
+  .card { padding: 20px 16px 8px; border-radius: 14px; }
+  .choices { margin: 8px -8px 0; }
+  .candidateVote { padding: 8px; }
+  .candidateButton { padding: 0 14px; }
+  .verification, .layoutText { padding: 20px 16px; }
+}
+
+/* Highlight after jumping from ?id= */
+.flash { animation: flash 2.2s ease-out; }
+@keyframes flash {
+  0%, 35% { background-color: var(--cream); box-shadow: 0 0 0 2px var(--gold); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
+
+/* Department picker (shared candidate ID) */
+.choiceLead { margin-bottom: 8px; }
+.choiceList {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.choiceItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 8px 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink-3);
+  text-align: left;
+  transition: background-color .15s;
+}
+.choiceItem:hover { background: #faf6f0; border-color: var(--line-strong); }
+.choiceItem:active { background: #f3ede5; }
+.choiceText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.choiceText strong {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.choiceText span {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.choiceState {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--green-container);
+  color: var(--on-green-container);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Sections reached through in-page links stop below the sticky app bar. */
+.board > section { scroll-margin-top: 72px; }
+
+/* Heading font (設定 → デザイン → フォント) */
+.main h1,
+.main h2,
+.main h3,
+.appbarTitle { font-family: var(--font-heading, var(--font-body, inherit)); }
+.main button,
+.main input { font-family: inherit; }

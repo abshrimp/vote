@@ -1,0 +1,82 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: #e9e3db;
+  animation: fade .15s ease-out;
+}
+@keyframes fade { from { opacity: 0; } }
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 56px;
+  padding: 0 8px 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.bar strong { font-size: 16px; font-weight: 500; }
+.note {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.devices {
+  display: inline-flex;
+  margin-left: auto;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+}
+.devices button {
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.devices .deviceOn {
+  background: var(--green-container);
+  color: var(--on-green-container);
+}
+.close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-2);
+}
+.close:hover { background: #f1ece6; }
+.stage {
+  flex: 1;
+  overflow: auto;
+  padding: 24px 16px 48px;
+}
+.frame {
+  max-width: 1100px;
+  margin: 0 auto;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(60, 40, 30, .14);
+  transition: max-width .2s ease-out;
+}
+.mobile {
+  max-width: 390px;
+  border-radius: 28px;
+  box-shadow: 0 0 0 10px #2b211d, 0 8px 30px rgba(0, 0, 0, .25);
+}
+.frame main { min-height: 70vh; }
+.frame main header[class] { position: relative; }
+@media (max-width: 600px) {
+  .note { display: none; }
+  .stage { padding: 0; }
+  .frame, .mobile { border-radius: 0; box-shadow: none; }
+}
