@@ -1,3 +1,4 @@
+import { withPublicEdgeCache } from "@/lib/voting/edge-cache";
 import { NextResponse } from "next/server";
 import { groupPolls } from "@/lib/voting/logic.mjs";
 import { publicSnapshot } from "@/lib/voting/public-snapshot.mjs";
@@ -5,7 +6,8 @@ import { publicSnapshot } from "@/lib/voting/public-snapshot.mjs";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  return withPublicEdgeCache(request, async () => {
   try {
     const snapshot = await publicSnapshot();
     // The response has no voter state, cookies, secret action URLs or admin data.
@@ -22,4 +24,5 @@ export async function GET() {
       status: 503, headers: { "Cache-Control": "no-store" },
     });
   }
+  });
 }
