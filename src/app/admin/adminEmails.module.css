@@ -1,0 +1,13 @@
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 24px; }
+.panel h2 { margin: 0 0 12px; font-size: 20px; }
+.hint { font-size: 13px; line-height: 1.65; color: var(--ink-2); margin: 8px 0 16px; }
+.add { display: flex; gap: 8px; flex-wrap: wrap; }
+.add input { flex: 1; min-width: 190px; min-height: 42px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 12px; background: var(--surface); color: var(--ink); }
+.add button { min-height: 42px; padding: 8px 18px; color: var(--on-green,white); background: var(--green); border: 0; border-radius: 6px; cursor: pointer; }
+.add button:disabled, .remove:disabled { opacity: .5; cursor: not-allowed; }
+.list { padding: 0; margin: 16px 0; list-style: none; }
+.list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; overflow-wrap: anywhere; }
+.list small { color: var(--ink-3); font-size: 11px; padding-left: 6px; }
+.remove { background: transparent; border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 12px; color: var(--ink); cursor: pointer; }
+.fixed { color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.error { color: #ac3030; } .message { color: var(--green); }
