@@ -16,7 +16,7 @@ export async function generateMetadata(): Promise<Metadata> {
       openGraph: { title, description, images: site.ogp ? [{ url: "/api/site/ogp", width: 1200, height: 630 }] : [] },
     };
   } catch {
-    return { title: { absolute: "投票フォーム" }, description: "投票フォームのページです.", robots: {index: false,follow: false} };
+    return { title: { absolute: "投票フォーム" }, description: "投票フォームのページです。", robots: {index: false,follow: false} };
   }
 }
 
