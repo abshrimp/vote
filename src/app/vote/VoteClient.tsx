@@ -505,10 +505,11 @@ export default function VoteClient() {
                 <p className={styles.error} role="alert">本人確認を読み込めませんでした。通信環境を確認して再読み込みしてください。</p>
                 <button type="button" className={styles.turnstileRetry} onClick={() => window.location.reload()}>再読み込み</button>
               </section>}
-              {/* The widget stays mounted and visible to Cloudflare during background verification. */}
+              {/* Keep the widget mounted for background verification, but hide its
+                  completed success UI until the next token reset. */}
               <dialog
                 ref={challengeDialog}
-                className={`${styles.turnstileHost} ${challengeOpen ? styles.turnstileDialog : styles.turnstileIdle}`}
+                className={`${styles.turnstileHost} ${challengeOpen ? styles.turnstileDialog : styles.turnstileIdle} ${token ? styles.turnstileVerified : ""}`}
                 aria-labelledby="turnstile-dialog-title"
                 onCancel={event => event.preventDefault()}
                 tabIndex={-1}
