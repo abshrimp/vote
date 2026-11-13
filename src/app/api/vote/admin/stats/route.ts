@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  if (!isAdmin(request)) {
+  if (!(await isAdmin(request))) {
     return NextResponse.json({ error: "管理者認証が必要です。" }, {
       status: 401, headers: { "Cache-Control": "private, no-store", "Vary": "Cookie" },
     });
