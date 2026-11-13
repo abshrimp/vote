@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { resolveTargets } from "@/lib/voting/links.mjs";
+import { applySelections } from "@/lib/voting/logic.mjs";
 import styles from "./vote.module.css";
 import Mark from "../Mark";
 import { Dialog, Snackbar, useConfirm } from "../ui/Dialog";
@@ -30,6 +31,7 @@ declare global {
 
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 type Target = { pollId: string; candidateId: string | null };
+type VoteSelection = { poll_id: string; candidate_id: string; is_official: number };
 
 function fingerprint() {
   return {
@@ -68,21 +70,23 @@ export default function VoteClient() {
     let mounted = true;
     async function load() {
       try {
-        const session = await fetch("/api/vote/session", {
-          credentials: "same-origin", cache: "no-store",
-        });
+        const [session, pageResponse] = await Promise.all([
+          fetch("/api/vote/session", { credentials: "same-origin", cache: "no-store" }),
+          fetch("/api/vote/public", { credentials: "omit" }),
+        ]);
         if (!session.ok) throw new Error("投票セッションを開始できませんでした。");
-        const response = await fetch("/api/vote/polls", {
+        if (!pageResponse.ok) throw new Error("公開フォームを取得できませんでした。");
+        const personalResponse = await fetch("/api/vote/polls", {
           credentials: "same-origin", cache: "no-store",
         });
-        if (!response.ok) throw new Error("投票情報を取得できませんでした。");
-        const data: { polls?: Poll[]; actions?: Action[]; blocks?: LayoutBlock[];
-          settings?: ThemeSettings } = await response.json();
+        if (!personalResponse.ok) throw new Error("投票情報を取得できませんでした。");
+        const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await pageResponse.json();
+        const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
         if (mounted) {
-          setPolls(data.polls ?? []);
-          setActions(data.actions ?? []);
-          setBlocks(data.blocks ?? []);
-          setSettings(data.settings ?? {});
+          setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
+          setActions(personal.actions ?? []);
+          setBlocks(page.blocks ?? []);
+          setSettings(page.settings ?? {});
         }
       } catch (error) {
         if (mounted) setLoadError(error instanceof Error ? error.message : "通信に失敗しました。");
@@ -121,12 +125,17 @@ export default function VoteClient() {
   }
 
   async function refresh() {
-    const pollRes = await fetch("/api/vote/polls", { cache: "no-store" });
-    if (!pollRes.ok) return;
-    const updated: { polls?: Poll[]; blocks?: LayoutBlock[]; actions?: Action[] } = await pollRes.json();
-    setPolls(updated.polls ?? []);
-    setBlocks(updated.blocks ?? []);
-    setActions(updated.actions ?? []);
+    const [publicResponse, personalResponse] = await Promise.all([
+      fetch("/api/vote/public", { credentials: "omit" }),
+      fetch("/api/vote/polls", { cache: "no-store" }),
+    ]);
+    if (!publicResponse.ok || !personalResponse.ok) return;
+    const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await publicResponse.json();
+    const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
+    setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
+    setBlocks(page.blocks ?? []);
+    setSettings(page.settings ?? {});
+    setActions(personal.actions ?? []);
   }
 
   // One press (in front of the committee) completes the exchange on the visitor's device.
