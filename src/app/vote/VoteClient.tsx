@@ -150,9 +150,12 @@ export default function VoteClient() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ actionId: action.id, token, operation: "claim" }),
       });
-      const body: { ok?: boolean; error?: string } = await response.json();
+      const body: { ok?: boolean; error?: string; redeemedAt?: string; refreshRequired?: boolean } = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.error ?? "操作できませんでした。");
-      await refreshActions();
+      setActions(old => old.map(item => item.id === action.id
+        ? { ...item, status: "used", eligible: true, usedAt: body.redeemedAt ?? null }
+        : item));
+      if (body.refreshRequired !== false) await refreshActions();
       notify("「" + action.title + "」を引き換えました");
     } catch (error) {
       notify(error instanceof Error ? error.message : "エラーが発生しました。");
