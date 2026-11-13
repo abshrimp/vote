@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
       if (Number(inserted.rows[0]?.is_official) === 0) {
         return NextResponse.json({
           ok: false, code: "POSSIBLE_DUPLICATE", conditionCounted: true,
-          message: "既に投票済みの可能性があります。",
+          message: "この端末では既に投票済みの可能性があります。",
         }, { status: 409, headers: { "Cache-Control": "no-store" } });
       }
       return NextResponse.json({ ok: true }, {
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
     const state = status.rows[0] ?? {};
     if (state.chosen) return fail(409, "ALREADY_SELECTED", "この候補には投票済みです。");
     if (!state.is_open) return fail(409, "NOT_OPEN", "この投票は現在受け付けていません。");
-    if (state.blocked) return fail(409, "POSSIBLE_DUPLICATE", "既に投票済みの可能性があります。");
+    if (state.blocked) return fail(409, "POSSIBLE_DUPLICATE", "この端末では既に投票済みの可能性があります。");
     if (Number(state.used) >= Number(state.max_votes)) {
       return fail(409, "ALREADY_VOTED", "この部門の投票可能数に達しています。");
     }
