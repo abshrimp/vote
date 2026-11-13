@@ -1,12 +1,14 @@
 export const RESET_PHRASE = "リセット";
 
 /**
- * Statements that clear all vote records (including condition-only entries),
- * per-browser request limits and action claims. Departments, candidates, actions,
- * the page layout and settings are kept. Visitors' cookies stay valid but no longer
- * match any vote, so everyone can vote again.
+ * Reset the complete voter state in one transaction. Clear materialized
+ * counters before their source rows: deletion triggers still run, but perform
+ * zero-row updates rather than rewriting a counter for every historical vote
+ * or claim. This preserves all foreign-key and trigger invariants.
  */
 export function resetStatements() {
-  return ["votes", "vote_request_limits", "action_claims"]
-    .map(table => ({ sql: "DELETE FROM " + table, args: [] }));
+  return [
+    "candidate_totals", "action_totals",
+    "votes", "action_claims", "vote_request_limits",
+  ].map(table => ({ sql: "DELETE FROM " + table, args: [] }));
 }
