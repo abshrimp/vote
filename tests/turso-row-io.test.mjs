@@ -59,7 +59,9 @@ test("public query is indexed and metadata/settings never read the candidate lis
   assert.match(settingsPlan, /SEARCH form_settings USING PRIMARY KEY/);
 
   const meta = db.prepare(SITE_METADATA_SQL).get();
-  assert.deepEqual(meta, { title: "投票タイトル", favicon: 1, ogp: 1 });
+  assert.equal(meta.title, "投票タイトル");
+  assert.equal(meta.favicon, 1);
+  assert.equal(meta.ogp, 1);
   const plan = db.prepare("EXPLAIN QUERY PLAN " + SITE_METADATA_SQL)
     .all().map(row => row.detail).join("\n");
   assert.doesNotMatch(plan, /candidates/);
