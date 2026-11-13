@@ -153,7 +153,10 @@ export default function FormStudio({ initialData, onLogout }: {
   const [tab, setTab] = useState<"questions" | "responses" | "settings">("questions");
   const [selected, setSelected] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
   const dragHandleRef = useRef<string | null>(null);
+  const dragMidpointsRef = useRef<number[]>([]);
+  const dragShiftRef = useRef(0);
   const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
   const [actionDraft, setActionDraft] = useState<ActionDraft | null>(null);
   const [blockTitle, setBlockTitle] = useState("");
@@ -537,23 +540,47 @@ export default function FormStudio({ initialData, onLogout }: {
     setLayoutDirty(true);
     if (!item.block) setSelected(block.id);
   }
-  function dropSection(target: Item) {
-    if (!draggedId || draggedId === target.id) return;
-    const source = items.find(item => item.id === draggedId);
-    if (!source) return;
+  function resetSectionDrag() {
+    setDraggedId(null);
+    setDragTargetIndex(null);
+    dragHandleRef.current = null;
+    dragMidpointsRef.current = [];
+  }
+  function dropSection() {
+    const from = items.findIndex(item => item.id === draggedId);
+    const to = dragTargetIndex;
+    if (from < 0 || to === null || from === to) {
+      resetSectionDrag();
+      return;
+    }
+
+    const source = items[from];
+    const others = items.filter(item => item.id !== draggedId);
+    const before = others[to] ?? null;
+    const neighbor = before ?? others[to - 1];
+    if (!neighbor) {
+      resetSectionDrag();
+      return;
+    }
+
     stage();
     const list = [...blocks];
     const sourceBlock = source.block ?? placeVirtual(source, list);
-    const targetBlock = target.block ?? placeVirtual(target, list);
-    if (!sourceBlock || !targetBlock) return;
-    const from = list.findIndex(block => block.id === sourceBlock.id);
-    const to = list.findIndex(block => block.id === targetBlock.id);
-    if (from < 0 || to < 0) return;
-    list.splice(from, 1);
-    list.splice(to, 0, sourceBlock);
-    setBlocks(list);
-    setLayoutDirty(true);
-    setSelected(sourceBlock.id);
+    const neighborBlock = neighbor.block ?? placeVirtual(neighbor, list);
+    if (sourceBlock && neighborBlock) {
+      const sourceIndex = list.findIndex(block => block.id === sourceBlock.id);
+      if (sourceIndex >= 0) {
+        list.splice(sourceIndex, 1);
+        const neighborIndex = list.findIndex(block => block.id === neighborBlock.id);
+        if (neighborIndex >= 0) {
+          list.splice(before ? neighborIndex : neighborIndex + 1, 0, sourceBlock);
+          setBlocks(list);
+          setLayoutDirty(true);
+          setSelected(sourceBlock.id);
+        }
+      }
+    }
+    resetSectionDrag();
   }
   async function remove(item: Item) {
     const block = item.block;
@@ -805,7 +832,20 @@ export default function FormStudio({ initialData, onLogout }: {
         ? { ...b, title: formTitle, body: formDescription } : b)}
       title={formTitle} description={formDescription} theme={theme} />
     {tab === "questions" && <div className={styles.canvasWrap}>
-      <div className={styles.canvas}>
+      <div className={`${styles.canvas} ${draggedId ? styles.sortingCanvas : ""}`}
+        onDragOver={e => {
+          if (!draggedId) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          const y = e.clientY + window.scrollY;
+          const to = dragMidpointsRef.current.filter(midpoint => y > midpoint).length;
+          setDragTargetIndex(current => current === to ? current : to);
+        }}
+        onDrop={e => {
+          if (!draggedId) return;
+          e.preventDefault();
+          dropSection();
+        }}>
         <section className={styles.formHeader} onClick={() => { if (selected !== "form-header") { stage(); setSelected("form-header"); } }}>
           <div className={styles.purpleLine} />
           <input aria-label="フォームタイトル" className={styles.formTitle} value={formTitle}
@@ -819,11 +859,17 @@ export default function FormStudio({ initialData, onLogout }: {
         </section>}
         {items.map((item, index) => {
           const active = selected === item.id;
+          const draggedIndex = draggedId ? items.findIndex(other => other.id === draggedId) : -1;
+          const shift = draggedIndex >= 0 && dragTargetIndex !== null
+            ? index > draggedIndex && index <= dragTargetIndex ? -dragShiftRef.current
+              : index >= dragTargetIndex && index < draggedIndex ? dragShiftRef.current : 0
+            : 0;
           const poll = item.poll;
           const action = item.action;
           const block = item.block;
           return <section key={item.id} id={"item-" + item.id}
             className={`${active ? styles.activeCard : styles.questionCard} ${draggedId === item.id ? styles.draggingCard : ""}`}
+            style={shift ? { transform: `translateY(${shift}px)` } : undefined}
             draggable={false}
             onPointerDownCapture={e => {
               const handle = (e.target as Element).closest("[data-drag-handle]");
@@ -838,15 +884,21 @@ export default function FormStudio({ initialData, onLogout }: {
               if (dragHandleRef.current !== item.id) { e.preventDefault(); return; }
               e.dataTransfer.effectAllowed = "move";
               e.dataTransfer.setData("text/plain", item.id);
+              // Keep the DOM in its original order while previewing: moving a native
+              // drag source in the DOM can cancel the drag in some browsers.
+              dragMidpointsRef.current = items.filter(other => other.id !== item.id).map(other => {
+                const node = document.getElementById("item-" + other.id);
+                const rect = node?.getBoundingClientRect();
+                return rect ? rect.top + window.scrollY + rect.height / 2 : Infinity;
+              });
+              dragShiftRef.current = e.currentTarget.getBoundingClientRect().height + 12;
+              setDragTargetIndex(index);
               setDraggedId(item.id);
             }}
             onDragEnd={e => {
               e.currentTarget.draggable = false;
-              setDraggedId(null);
-              dragHandleRef.current = null;
+              resetSectionDrag();
             }}
-            onDragOver={e => { if (draggedId && draggedId !== item.id) e.preventDefault(); }}
-            onDrop={e => { e.preventDefault(); dropSection(item); setDraggedId(null); }}
             onClick={() => { if (!active) select(item); }}>
             {active && <div className={styles.selectionAccent}/>}
             <div className={styles.cardHead}>
