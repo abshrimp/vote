@@ -79,10 +79,13 @@ export async function POST(request: NextRequest) {
     const bucket = Math.floor(Date.now() / 300000);
     const attempts = await query(
       "INSERT INTO vote_request_limits(voter_hash,bucket,attempts) VALUES(?,?,1) " +
-      "ON CONFLICT(voter_hash,bucket) DO UPDATE SET attempts=attempts+1 RETURNING attempts",
+      "ON CONFLICT(voter_hash,bucket) DO UPDATE SET attempts=attempts+1 " +
+      "WHERE attempts<12 RETURNING attempts",
       [hash, bucket],
     );
-    if (Number(attempts.rows[0]?.attempts ?? 0) > 12) {
+    // No RETURNING row means the counter is already at the limit. Subsequent
+    // attempts remain blocked without writing to Turso.
+    if (!attempts.rows.length || Number(attempts.rows[0]?.attempts) > 12) {
       return json({ error: "操作が多すぎます。時間をおいてください。" }, 429);
     }
     const definitions = await publicActions();
