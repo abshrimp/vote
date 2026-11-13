@@ -439,6 +439,7 @@ export default function VoteClient() {
           polls={polls} actions={actions} blocks={bodyBlocks}
           filters={filters} onFilter={onFilter}
           saving={saving} token={token} siteKey={siteKey}
+          verificationError={scriptFailed || challengeError}
           submit={submit} claimAction={claimAction} openLink={openLink}
         />}
         {needsVerification && (
