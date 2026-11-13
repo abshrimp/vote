@@ -402,6 +402,7 @@ export default function VoteClient() {
               {challengeOpen && <div className={styles.turnstileBackdrop} aria-hidden="true" />}
               {/* The widget stays mounted and visible to Cloudflare during background verification. */}
               <div
+                key="turnstile-host"
                 ref={challengeDialog}
                 className={`${styles.turnstileHost} ${challengeOpen ? styles.turnstileDialog : styles.turnstileIdle}`}
                 role={challengeOpen ? "dialog" : undefined}
@@ -409,10 +410,10 @@ export default function VoteClient() {
                 aria-labelledby={challengeOpen ? "turnstile-dialog-title" : undefined}
                 tabIndex={-1}
               >
-                {challengeOpen && <>
+                <div hidden={!challengeOpen}>
                   <h2 id="turnstile-dialog-title" className={styles.turnstileTitle}>本人確認</h2>
                   <p className={styles.turnstileHelp}>投票を続けるために、以下の確認を完了してください。</p>
-                </>}
+                </div>
                 <div ref={widgetElement} className={styles.turnstileWidget} />
                 {challengeOpen && challengeError && <>
                   <p role="alert" className={styles.turnstileError}>認証に失敗しました。通信環境を確認して再試行してください。</p>
