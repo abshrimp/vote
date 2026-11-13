@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { validPublicId, resolveTarget, resolveTargets, normalizePublicIds, findPublicIdConflict } from "../src/lib/voting/links.mjs";
+import { candidateElementId, publicIdFromHash, validPublicId, resolveTarget, resolveTargets, normalizePublicIds, findPublicIdConflict } from "../src/lib/voting/links.mjs";
 
 test("public IDs resolve directly from poll and candidate columns", () => {
   const polls = [{ id: "p1", publicId: "food", candidates: [
@@ -15,6 +15,24 @@ test("public IDs resolve directly from poll and candidate columns", () => {
   assert.deepEqual(resolveTarget("food", polls), { pollId: "p1", candidateId: null });
   assert.deepEqual(resolveTarget("c2", polls), { pollId: "p1", candidateId: "c2" });
   assert.equal(resolveTarget("unknown", polls), null);
+});
+
+test("decodes localized URL anchors and ignores malformed fragments", () => {
+  const id = "団体:吹奏楽";
+  assert.equal(publicIdFromHash("#" + id), id);
+  assert.equal(publicIdFromHash("#" + encodeURIComponent(id)), id);
+  for (const hash of ["#", "#%", "#%FF", "#space%20here", "not-a-fragment"])
+    assert.equal(publicIdFromHash(hash), null);
+});
+
+test("the selected department scopes candidate row IDs even when internal IDs repeat", () => {
+  const polls = ["food", "stage"].map(id => ({
+    id, candidates: [{ id: "entry-1", publicId: "club" }],
+  }));
+  const targets = resolveTargets("club", polls);
+  const [food, stage] = targets.map(target => candidateElementId(target.pollId, target.candidateId));
+  assert.notEqual(food, stage);
+  assert.notEqual(candidateElementId("a-b", "c"), candidateElementId("a", "b-c"));
 });
 
 test("Hrana batch guards each step and rolls back on failure", async () => {

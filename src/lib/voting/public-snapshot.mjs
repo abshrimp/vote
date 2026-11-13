@@ -23,7 +23,20 @@ export const PUBLIC_POLLS_SQL =
   "c.id AS candidate_id,c.public_id AS candidate_public_id,c.name AS candidate_name,c.extra_json AS candidate_extra_json " +
   "FROM polls p LEFT JOIN candidates c ON c.poll_id=p.id " +
   "WHERE p.is_published=1 AND p.starts_at<=? AND p.ends_at>? " +
+  "AND NOT EXISTS (SELECT 1 FROM page_blocks b WHERE b.kind='poll' AND b.reference_id=p.id AND b.is_published=0) " +
   "ORDER BY p.id,c.sort_order,c.id";
+
+export const PUBLIC_ACTIONS_SQL =
+  "SELECT id,title,description,kind,config_json,condition_json," +
+  "EXISTS(SELECT 1 FROM page_blocks b WHERE b.kind='action' AND b.reference_id=a.id AND b.is_published=0) AS hidden " +
+  "FROM actions a WHERE a.is_published=1 AND a.starts_at<=? AND a.ends_at>? ORDER BY a.id";
+
+// Keep hidden reference markers so a separately cached action cannot be
+// appended as "unplaced" before the visitor reloads the layout.
+export const PUBLIC_BLOCKS_SQL =
+  "SELECT id,kind,reference_id,CASE WHEN is_published=1 THEN title ELSE '' END AS title," +
+  "CASE WHEN is_published=1 THEN body ELSE '' END AS body,is_published FROM page_blocks " +
+  "WHERE is_published=1 OR kind IN ('poll','action') ORDER BY sort_order,id";
 
 export const PUBLIC_SETTINGS_SQL = "SELECT key,value FROM form_settings WHERE key IN (" +
   "'themeColor','accentColor','highlightColor','textColor','backgroundColor'," +
@@ -40,12 +53,7 @@ async function loadPublicSnapshot() {
   const now = new Date().toISOString();
   const [polls, layout, settings] = await readBatch([
     { sql: PUBLIC_POLLS_SQL, args: [now, now] },
-    {
-      sql: "SELECT id,kind,reference_id," +
-        "CASE WHEN is_published=1 THEN title ELSE '' END AS title," +
-        "CASE WHEN is_published=1 THEN body ELSE '' END AS body," +
-        "is_published FROM page_blocks ORDER BY sort_order,id",
-    },
+    { sql: PUBLIC_BLOCKS_SQL },
     // Favicon and OGP are served independently; never load them for page JSON.
     { sql: PUBLIC_SETTINGS_SQL },
   ]);
@@ -57,10 +65,7 @@ export const publicSnapshot = createTtlCache(loadPublicSnapshot);
 /** Action conditions are small and remain server-side (links can be private). */
 export const publicActions = createTtlCache(async () => {
   const now = new Date().toISOString();
-  const result = await query(
-    "SELECT id,title,description,kind,config_json,condition_json FROM actions " +
-    "WHERE is_published=1 AND starts_at<=? AND ends_at>? ORDER BY id", [now, now],
-  );
+  const result = await query(PUBLIC_ACTIONS_SQL, [now, now]);
   return result.rows;
 });
 

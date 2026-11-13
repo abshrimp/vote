@@ -2,6 +2,22 @@ export function validPublicId(value) {
   return typeof value === "string" && /^[\p{L}\p{N}_:-]{1,64}$/u.test(value);
 }
 
+/** Return the decoded section/public ID of a URL fragment, including localized IDs. */
+export function publicIdFromHash(hash) {
+  if (!hash.startsWith("#")) return null;
+  try {
+    const id = decodeURIComponent(hash.slice(1));
+    return validPublicId(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+// Internal IDs may repeat across polls and never contain a colon.
+export function candidateElementId(pollId, candidateId) {
+  return "candidate-" + pollId + ":" + candidateId;
+}
+
 /** A public ID field may hold several IDs separated by commas ("food,yatai"). */
 export function splitPublicIds(value) {
   return typeof value === "string" ? value.split(/[,、，\s]+/).map(v => v.trim()).filter(Boolean) : [];

@@ -93,6 +93,7 @@
   max-width: 680px;
   margin: 0 auto;
   padding: 0 16px;
+  overflow-wrap: anywhere;
 }
 
 /* ───────── Hero ───────── */
@@ -479,16 +480,17 @@
 
 /* Keep the widget mounted while Cloudflare runs a background challenge. */
 .turnstileArea { margin: 16px 0 0; padding: 0; }
-.turnstileBackdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+.turnstileHost::backdrop {
   background: rgba(30, 22, 18, .4);
 }
 .turnstileHost {
+  display: block;
   position: fixed;
-  top: 50%;
-  left: 50%;
+  inset: 50% auto auto 50%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   z-index: 101;
   transform: translate(-50%, -50%);
 }

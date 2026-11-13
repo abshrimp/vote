@@ -179,7 +179,7 @@ export default function RichTextEditor({ value, onChange, placeholder, label, cl
         event.preventDefault();
         const html = event.clipboardData.getData("text/html");
         const text = event.clipboardData.getData("text/plain");
-        const clean = serializeRich(parseRich(html || text));
+        const clean = serializeRich(parseRich(html || escapeHtml(text)));
         if (clean) run("insertHTML", clean);
       }} />
     {(focused || linkOpen) && <div className={styles.toolbar} role="toolbar" aria-label={label + "の書式"}>

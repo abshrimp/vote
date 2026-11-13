@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { splitStatements } from "../scripts/setup-db.mjs";
-import { updatePollStatement } from "../src/lib/voting/admin-update.mjs";
+import { updatePollStatement, updateStudioPollStatement } from "../src/lib/voting/admin-update.mjs";
 
 test("poll editing avoids aggregation unless lowering the limit and never lowers below actual votes", async t => {
   let DatabaseSync;
@@ -36,4 +36,24 @@ test("poll editing avoids aggregation unless lowering the limit and never lowers
     .map(row => row.detail).join("\n");
   assert.match(plan, /SEARCH polls USING PRIMARY KEY/);
   assert.match(plan, /SEARCH votes USING PRIMARY KEY/);
+
+  const studioUpdate = (maxVotes) => {
+    const statement = updateStudioPollStatement({
+      ...params, title: "Studio edit", nameFontSize: 18, columnsJson: "[]", maxVotes,
+    });
+    return db.prepare(statement.sql).run(...statement.args);
+  };
+  assert.equal(studioUpdate(3).changes, 1);
+  assert.equal(studioUpdate(3).changes, 0);
+  assert.equal(studioUpdate(2).changes, 1);
+
+  db.exec("BEGIN");
+  db.exec("UPDATE candidates SET name='Not committed' WHERE poll_id='p' AND id='a'");
+  assert.throws(() => studioUpdate(1), /NOT NULL constraint failed: polls\.max_votes/);
+  db.exec("ROLLBACK");
+  assert.equal(db.prepare("SELECT max_votes FROM polls WHERE id='p'").get().max_votes, 2);
+  assert.equal(db.prepare("SELECT name FROM candidates WHERE poll_id='p' AND id='a'").get().name, "A");
+
+  db.exec("DELETE FROM votes WHERE poll_id='p' AND candidate_id='b'");
+  assert.equal(studioUpdate(1).changes, 1);
 });

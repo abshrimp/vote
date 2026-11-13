@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { groupPolls, applySelections } from "../src/lib/voting/logic.mjs";
+import { visitorActions } from "../src/lib/voting/visitor-actions.mjs";
 import {
-  PUBLIC_POLLS_SQL, PUBLIC_SETTINGS_SQL, SITE_METADATA_SQL,
+  PUBLIC_POLLS_SQL, PUBLIC_ACTIONS_SQL, PUBLIC_BLOCKS_SQL, PUBLIC_SETTINGS_SQL, SITE_METADATA_SQL,
 } from "../src/lib/voting/public-snapshot.mjs";
 
 test("private selection overlay exactly matches the original combined page response", () => {
@@ -66,4 +67,37 @@ test("public query is indexed and metadata/settings never read the candidate lis
     .all().map(row => row.detail).join("\n");
   assert.doesNotMatch(plan, /candidates/);
   assert.match(plan, /SEARCH form_settings USING PRIMARY KEY/);
+});
+
+test("public definitions respect hidden layout blocks and include unplaced sections", async t => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import("node:sqlite")); }
+  catch { t.skip("node:sqlite is unavailable"); return; }
+  const { readFileSync } = await import("node:fs");
+  const db = new DatabaseSync(":memory:");
+  t.after(() => db.close());
+  db.exec(readFileSync(new URL("../db/schema.sql", import.meta.url), "utf8"));
+
+  const addPoll = db.prepare("INSERT INTO polls(id,title,starts_at,ends_at,is_published) VALUES(?,?,'2000','2100',1)");
+  const addAction = db.prepare("INSERT INTO actions(id,title,kind,condition_json,starts_at,ends_at,is_published) VALUES(?,?,'notice',?,'2000','2100',1)");
+  const addBlock = db.prepare("INSERT INTO page_blocks(id,kind,reference_id,is_published) VALUES(?,?,?,?)");
+  // The two kinds have independent internal-ID namespaces.
+  for (const id of ["first", "second", "unplaced"]) {
+    addPoll.run(id, id);
+    addAction.run(id, id, JSON.stringify({ type: "min_total_votes", count: 1 }));
+  }
+  addBlock.run("first-poll", "poll", "first", 0);
+  addBlock.run("first-notice", "action", "first", 1);
+  addBlock.run("second-poll", "poll", "second", 1);
+  addBlock.run("second-notice", "action", "second", 0);
+
+  db.exec("INSERT INTO page_blocks(id,kind,title,is_published,sort_order) VALUES " +
+    "('private-heading','heading','準備中',0,-2),('public-heading','heading','公開タイトル',1,-1)");
+
+  const blocks = db.prepare(PUBLIC_BLOCKS_SQL).all();
+  assert.equal(blocks.find(row => row.kind === "heading").id, "public-heading");
+  assert.equal(blocks.find(row => row.id === "second-notice").is_published, 0);
+  assert.deepEqual(db.prepare(PUBLIC_POLLS_SQL).all("2026", "2026").map(row => row.poll_id), ["second", "unplaced"]);
+  const definitions = db.prepare(PUBLIC_ACTIONS_SQL).all("2026", "2026");
+  assert.deepEqual(visitorActions(definitions, [], []).map(action => action.id), ["first", "unplaced"]);
 });

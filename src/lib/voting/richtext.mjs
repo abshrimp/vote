@@ -1,3 +1,5 @@
+import { publicIdFromHash } from "./links.mjs";
+
 // A deliberately tiny rich-text format for descriptions: bold, italic, underline,
 // links, numbered and bulleted lists, and line breaks. Stored as a whitelisted HTML
 // subset; everything else is dropped (its text is kept). Rendering builds React
@@ -19,15 +21,15 @@ const decode = text => text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, (all, na
 const escapeText = text => text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const escapeAttr = text => escapeText(text).replace(/"/g, "&quot;");
 
-/** In-page links to a section or a department/candidate ID, e.g. "#food". */
-export const INTERNAL_LINK = /^#[A-Za-z0-9_-]{1,64}$/;
-
 /** Web, mail and in-page (#ID) links only; anything else (javascript:, data:, ...) is rejected. */
 export function safeHref(raw) {
   if (typeof raw !== "string") return null;
   let href = raw.trim();
   if (!href) return null;
-  if (href.startsWith("#")) return INTERNAL_LINK.test(href) ? href : null;
+  if (href.startsWith("#")) {
+    const id = publicIdFromHash(href);
+    return id ? "#" + id : null;
+  }
   if (!/^[a-z][a-z0-9+.-]*:/i.test(href)) href = "https://" + href.replace(/^\/+/, "");
   try {
     const url = new URL(href);
@@ -44,10 +46,10 @@ export function parseRich(input) {
   const source = typeof input === "string" ? input : "";
   const root = { t: "root", c: [] };
   if (!KNOWN.test(source)) {
-    // Legacy plain text.
+    // Even unformatted contentEditable text has HTML-escaped ampersands and brackets.
     source.split("\n").forEach((line, i) => {
       if (i) root.c.push({ t: "br" });
-      if (line) root.c.push({ t: "text", v: line });
+      if (line) root.c.push({ t: "text", v: decode(line) });
     });
     return root.c;
   }

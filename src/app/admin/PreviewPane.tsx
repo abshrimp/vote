@@ -87,7 +87,7 @@ export default function PreviewPane({ open, onClose, polls, actions, blocks, tit
             </header>
             <VoteBoard polls={votePolls} actions={voteActions}
               blocks={header ? blocks.filter(block => block.id !== header.id) : blocks}
-              selected={{}} setSelected={() => {}} saving={null} token="" siteKey="preview"
+              filters={new Map()} onFilter={() => {}} saving={null} token="" siteKey="preview"
               submit={noop} claimAction={noop} openLink={noop} />
           </div>
           <footer className={voteStyles.footer}>

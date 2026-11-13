@@ -37,4 +37,20 @@ test("links accept web and mail addresses only", () => {
   assert.equal(safeHref("#a b"), null);
   assert.equal(safeHref("#<x>"), null);
   assert.equal(sanitizeRich('<a href="#food">模擬店へ</a>'), '<a href="#food">模擬店へ</a>');
+  const anchor = "#vote-categories:飲食";
+  assert.equal(sanitizeRich('<a href="' + anchor + '">飲食へ</a>'), '<a href="' + anchor + '">飲食へ</a>');
+  assert.equal(safeHref("#" + encodeURIComponent(anchor.slice(1))), anchor);
+});
+
+test("single-line descriptions keep their literal text across editor and server saves", () => {
+  // The browser's innerHTML for plain text includes entities even without formatting tags.
+  for (const [html, display] of [
+    ["A &amp; B &lt; C", "A & B < C"],
+    ["&lt;b&gt;見本&lt;/b&gt;", "<b>見本</b>"],
+    ["&amp;amp;", "&amp;"],
+  ]) {
+    const saved = sanitizeRich(html);
+    assert.equal(sanitizeRich(saved), saved);
+    assert.deepEqual(parseRich(saved), [{ t: "text", v: display }]);
+  }
 });
