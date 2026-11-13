@@ -40,3 +40,28 @@ export function publicIdCheckPlan(operations) {
       args: [change.pollId] },
   ] };
 }
+
+/** Apply the pending batch to the rows participating in the ID check. */
+export function projectPublicIds(pollRows, candidateRows, operations) {
+  let polls = pollRows.map(row => ({ ...row }));
+  let candidates = candidateRows.map(row => ({ ...row }));
+  for (const op of operations) {
+    if (op.type === "poll_new") polls.push({ id: op.id, public_id: null });
+    if (op.type === "candidate_new") candidates.push({
+      poll_id: op.pollId, id: op.id, public_id: null,
+    });
+    if (op.type === "poll_delete") {
+      polls = polls.filter(p => p.id !== op.id);
+      candidates = candidates.filter(c => c.poll_id !== op.id);
+    }
+    if (op.type === "public_id") {
+      const value = normalizePublicIds(op.publicId) ?? null;
+      if (op.candidateId === null) polls = polls.map(p =>
+        p.id === op.pollId ? { ...p, public_id: value } : p);
+      else candidates = candidates.map(c =>
+        c.poll_id === op.pollId && c.id === op.candidateId
+          ? { ...c, public_id: value } : c);
+    }
+  }
+  return { polls, candidates };
+}
