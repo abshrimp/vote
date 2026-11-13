@@ -34,8 +34,13 @@ function prepare(operations: Operation[]) {
           !Number.isInteger(max) || max < 1 || max > 20 ||
           !validFontSize(op.nameFontSize) || !validColumns(op.columns) ||
           (op.nameStyle !== undefined && !validStyle(op.nameStyle)) || typeof op.isPublished !== "boolean") throw Error("部門の入力が正しくありません。");
-        steps.push({ sql: "UPDATE polls SET title=?,description=?,max_votes=?,name_font_size=?,columns_json=?,starts_at=?,ends_at=?,is_published=? WHERE id=?",
-          args: [title, description, max, op.nameFontSize as number, serializeColumns(op.columns as Parameters<typeof serializeColumns>[0], (op.nameStyle ?? {}) as Record<string, unknown>), op.startsAt as string, op.endsAt as string, Number(op.isPublished), op.id as string] });
+        const values = [title, description, max, op.nameFontSize as number,
+          serializeColumns(op.columns as Parameters<typeof serializeColumns>[0], (op.nameStyle ?? {}) as Record<string, unknown>),
+          op.startsAt as string, op.endsAt as string, Number(op.isPublished)];
+        steps.push({ sql: "UPDATE polls SET title=?,description=?,max_votes=?,name_font_size=?,columns_json=?,starts_at=?,ends_at=?,is_published=? " +
+          "WHERE id=? AND (title IS NOT ? OR description IS NOT ? OR max_votes IS NOT ? OR name_font_size IS NOT ? " +
+          "OR columns_json IS NOT ? OR starts_at IS NOT ? OR ends_at IS NOT ? OR is_published IS NOT ?)",
+          args: [...values, op.id as string, ...values] });
         break;
       }
       case "poll_new": {
@@ -116,7 +121,10 @@ function prepare(operations: Operation[]) {
       case "candidate": {
         const name = cleanText(op.name);
         if (!validId(op.pollId) || !validId(op.id) || !name || !validColumns(op.columns) || !validCells(op.extra, op.columns)) throw Error("候補の入力が正しくありません。");
-        steps.push({ sql: "UPDATE candidates SET name=?,extra_json=? WHERE poll_id=? AND id=?", args: [name, JSON.stringify(op.extra), op.pollId as string, op.id as string] });
+        const extra = JSON.stringify(op.extra);
+        steps.push({ sql: "UPDATE candidates SET name=?,extra_json=? WHERE poll_id=? AND id=? " +
+          "AND (name IS NOT ? OR extra_json IS NOT ?)",
+          args: [name, extra, op.pollId as string, op.id as string, name, extra] });
         break;
       }
       case "candidate_new": {
@@ -132,17 +140,23 @@ function prepare(operations: Operation[]) {
         if (!validId(op.id) || !title || description === null || !validRange(op.startsAt, op.endsAt) ||
           !validateAction(op.kind, op.condition, (op.config ?? {}) as Record<string, unknown>) ||
           typeof op.isPublished !== "boolean") throw Error("アクションの入力が正しくありません。");
-        steps.push({ sql: "UPDATE actions SET title=?,description=?,kind=?,config_json=?,condition_json=?,starts_at=?,ends_at=?,is_published=? WHERE id=?",
-          args: [title, description, op.kind as string, JSON.stringify(actionConfig(op.kind, (op.config ?? {}) as Record<string, unknown>)),
-            JSON.stringify(op.condition), op.startsAt as string, op.endsAt as string, Number(op.isPublished), op.id as string] });
+        const values = [title, description, op.kind as string,
+          JSON.stringify(actionConfig(op.kind, (op.config ?? {}) as Record<string, unknown>)),
+          JSON.stringify(op.condition), op.startsAt as string, op.endsAt as string, Number(op.isPublished)];
+        steps.push({ sql: "UPDATE actions SET title=?,description=?,kind=?,config_json=?,condition_json=?,starts_at=?,ends_at=?,is_published=? " +
+          "WHERE id=? AND (title IS NOT ? OR description IS NOT ? OR kind IS NOT ? OR config_json IS NOT ? " +
+          "OR condition_json IS NOT ? OR starts_at IS NOT ? OR ends_at IS NOT ? OR is_published IS NOT ?)",
+          args: [...values, op.id as string, ...values] });
         break;
       }
       case "block": {
         const block = validateBlock(op.block);
         const input = op.block as Record<string, unknown>;
         if (!block || !validId(input.id)) throw Error("ページ項目の入力が正しくありません。");
-        steps.push({ sql: "UPDATE page_blocks SET title=?,body=?,is_published=? WHERE id=?",
-          args: [block.title, block.body, block.isPublished, input.id as string] });
+        steps.push({ sql: "UPDATE page_blocks SET title=?,body=?,is_published=? WHERE id=? " +
+          "AND (title IS NOT ? OR body IS NOT ? OR is_published IS NOT ?)",
+          args: [block.title, block.body, block.isPublished, input.id as string,
+            block.title, block.body, block.isPublished] });
         break;
       }
       case "public_id": {
