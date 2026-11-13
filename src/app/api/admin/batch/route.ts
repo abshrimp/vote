@@ -4,6 +4,7 @@ import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
 import { publicIdCheckPlan, projectPublicIds } from "@/lib/voting/public-id-check.mjs";
+import { deletePollStatements, deleteActionStatements } from "@/lib/voting/delete-statements.mjs";
 import { SETTING_RULES } from "@/lib/voting/settings.mjs";
 import { customGoogleFont, verifyGoogleFont } from "@/lib/voting/fonts.mjs";
 import { validateBlock } from "@/lib/voting/layout.mjs";
@@ -92,19 +93,12 @@ function prepare(operations: Operation[]) {
       case "poll_delete": {
         // Removes the department with its candidates and every vote cast in it.
         if (!validId(op.id)) throw Error("削除する部門が正しくありません。");
-        for (const sql of [
-          "DELETE FROM votes WHERE poll_id=?",
-          "DELETE FROM candidates WHERE poll_id=?",
-          "DELETE FROM page_blocks WHERE kind='poll' AND reference_id=?", "DELETE FROM polls WHERE id=?",
-        ]) steps.push({ sql, args: [op.id as string] });
+        steps.push(...deletePollStatements(op.id as string));
         break;
       }
       case "action_delete": {
         if (!validId(op.id)) throw Error("削除するアクションが正しくありません。");
-        for (const sql of [
-          "DELETE FROM action_claims WHERE action_id=?",
-          "DELETE FROM page_blocks WHERE kind='action' AND reference_id=?", "DELETE FROM actions WHERE id=?",
-        ]) steps.push({ sql, args: [op.id as string] });
+        steps.push(...deleteActionStatements(op.id as string));
         break;
       }
       case "layout_order": {
