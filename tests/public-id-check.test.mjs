@@ -67,6 +67,16 @@ test("single candidate alias edits use an indexed poll-scoped read instead of al
   assert.equal(publicIdCheckPlan(candidate("a,b")), null);
   assert.equal(publicIdCheckPlan([...candidate("a"), ...candidate("b", "p1", "c40")]), null);
 
+  const deletedAliasOps = [
+    { type: "candidate_delete", pollId: "p0", ids: ["c0"] },
+    { type: "public_id", pollId: "p0", candidateId: "c1", publicId: "001" },
+  ];
+  assert.equal(publicIdCheckPlan(deletedAliasOps), null);
+  assert.equal(evaluate(deletedAliasOps).conflict, null);
+  const projectedDeletion = projectPublicIds(allPolls, allCandidates, deletedAliasOps);
+  assert.equal(projectedDeletion.candidates.some(row => row.poll_id === "p0" && row.id === "c0"), false);
+  assert.equal(projectedDeletion.candidates.find(row => row.poll_id === "p0" && row.id === "c1").public_id, "001");
+
   // A candidate alias must not equal any internal candidate ID globally.
   // That global invariant is enforced atomically by the canonical trigger.
   assert.throws(() => db.exec("UPDATE candidates SET public_id='c40' WHERE poll_id='p0' AND id='c0'"), /conflict/i);
