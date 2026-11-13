@@ -12,7 +12,7 @@ export async function GET() {
       return new NextResponse(null, { status: 404 });
     }
     const bytes = Buffer.from(image.slice("data:image/jpeg;base64,".length), "base64");
-    return new NextResponse(bytes, {
+    return new NextResponse(new Blob([new Uint8Array(bytes)]), {
       headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=30" },
     });
   } catch {
