@@ -1256,7 +1256,7 @@ export default function FormStudio({ initialData, onLogout }: {
         </div>)}</section>)}
       {data.actions.some(a => a.kind === "claim") && <section className={styles.panel}>
         <h3>引換権</h3>
-        <p className={styles.subtle}>来場者が運営スタッフの前で自分の画面のボタンを押すと引き換え完了です。ここでは件数を確認できます。</p>
+        <p className={styles.subtle}>条件を指定したボタンを押すと引き換え完了です。ここでは件数を確認できます。</p>
         {data.actions.filter(a => a.kind === "claim").map(a => {
           const count = (status: string) => Number(a.claims.find(c => c.status === status)?.count ?? 0);
           const used = count("used");
