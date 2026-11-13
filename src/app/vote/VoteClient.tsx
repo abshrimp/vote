@@ -22,6 +22,8 @@ type Turnstile = {
     callback: (value: string) => void;
     "expired-callback": () => void;
     "error-callback": () => void;
+    "before-interactive-callback": () => void;
+    "after-interactive-callback": () => void;
   }) => string;
   reset: (id: string) => void;
   remove: (id: string) => void;
@@ -64,6 +66,9 @@ export default function VoteClient() {
   const [saving, setSaving] = useState<string | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
   const [token, setToken] = useState("");
+  const [challengeOpen, setChallengeOpen] = useState(false);
+  const [challengeError, setChallengeError] = useState(false);
+  const challengeDialog = useRef<HTMLDivElement>(null);
   const widgetElement = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
 
@@ -99,6 +104,25 @@ export default function VoteClient() {
     return () => { mounted = false; };
   }, []);
 
+  // Keep focus inside the challenge while manual verification is required.
+  useEffect(() => {
+    if (!challengeOpen) return;
+    const dialog = challengeDialog.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog?.focus();
+    const trapFocus = (event: FocusEvent) => {
+      if (dialog && event.target instanceof Node && !dialog.contains(event.target)) dialog.focus();
+    };
+    document.addEventListener("focusin", trapFocus);
+    return () => {
+      document.removeEventListener("focusin", trapFocus);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [challengeOpen]);
+
   useEffect(() => {
     if (!scriptReady || !siteKey || !widgetElement.current || !window.turnstile) return;
     const id = window.turnstile.render(widgetElement.current, {
@@ -106,12 +130,26 @@ export default function VoteClient() {
       action: "festival_vote",
       theme: "light",
       appearance: "interaction-only",
-      callback: (value) => setToken(value),
+      callback: (value) => {
+        setToken(value);
+        setChallengeOpen(false);
+        setChallengeError(false);
+      },
+      "before-interactive-callback": () => {
+        setChallengeError(false);
+        setChallengeOpen(true);
+      },
+      "after-interactive-callback": () => setChallengeOpen(false),
       "expired-callback": () => {
         setToken("");
+        setChallengeOpen(false);
         window.turnstile?.reset(id);
       },
-      "error-callback": () => setToken(""),
+      "error-callback": () => {
+        setToken("");
+        setChallengeError(true);
+        setChallengeOpen(true);
+      },
     });
     widgetId.current = id;
     return () => {
@@ -170,6 +208,8 @@ export default function VoteClient() {
       notify(error instanceof Error ? error.message : "エラーが発生しました。");
     } finally {
       setToken("");
+      setChallengeOpen(false);
+      setChallengeError(false);
       if (widgetId.current) window.turnstile?.reset(widgetId.current);
       setSaving(null);
     }
@@ -222,6 +262,8 @@ export default function VoteClient() {
       notify("通信に失敗しました。再読み込みして投票状況を確認してください。");
     } finally {
       setToken("");
+      setChallengeOpen(false);
+      setChallengeError(false);
       if (widgetId.current) window.turnstile?.reset(widgetId.current);
       setSaving(null);
     }
@@ -359,20 +401,44 @@ export default function VoteClient() {
           submit={submit} claimAction={claimAction} openLink={openLink}
         />}
         {!loading && (polls.some((poll) => !poll.voted) || actions.some(action => action.kind === "claim" && action.eligible && !action.status)) && (
-          <section className={styles.turnstileArea} aria-label="不正投票防止認証">
-            {siteKey ? (
-              <>
-                <Script
-                  src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-                  strategy="afterInteractive"
-                  onReady={() => setScriptReady(true)}
-                />
+          siteKey ? (
+            <>
+              <Script
+                src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+                strategy="afterInteractive"
+                onReady={() => setScriptReady(true)}
+              />
+              {challengeOpen && <div className={styles.turnstileBackdrop} aria-hidden="true" />}
+              {/* The widget stays mounted and visible to Cloudflare during background verification. */}
+              <div
+                key="turnstile-host"
+                ref={challengeDialog}
+                className={`${styles.turnstileHost} ${challengeOpen ? styles.turnstileDialog : styles.turnstileIdle}`}
+                role={challengeOpen ? "dialog" : undefined}
+                aria-modal={challengeOpen ? "true" : undefined}
+                aria-labelledby={challengeOpen ? "turnstile-dialog-title" : undefined}
+                tabIndex={-1}
+              >
+                <div hidden={!challengeOpen}>
+                  <h2 id="turnstile-dialog-title" className={styles.turnstileTitle}>本人確認</h2>
+                  <p className={styles.turnstileHelp}>投票を続けるために、以下の確認を完了してください。</p>
+                </div>
                 <div ref={widgetElement} className={styles.turnstileWidget} />
-              </>
-            ) : (
+                {challengeOpen && challengeError && <>
+                  <p role="alert" className={styles.turnstileError}>認証に失敗しました。通信環境を確認して再試行してください。</p>
+                  <button type="button" className={styles.turnstileRetry} onClick={() => {
+                    setChallengeError(false);
+                    setChallengeOpen(false);
+                    if (widgetId.current) window.turnstile?.reset(widgetId.current);
+                  }}>再試行する</button>
+                </>}
+              </div>
+            </>
+          ) : (
+            <section className={styles.turnstileArea} aria-label="不正投票防止認証">
               <p role="alert" className={styles.error}>Turnstileの設定がありません。</p>
-            )}
-          </section>
+            </section>
+          )
         )}
       </div>
       <BackToTop />
