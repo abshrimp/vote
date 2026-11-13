@@ -92,8 +92,8 @@ test("rate-limit counters stop writing after saturation without relaxing block d
       { allowed: false, scope: "session" });
   }
   assert.equal(writes, 52); // Further abusive attempts cause zero writes.
-  assert.deepEqual(db.prepare("SELECT attempts FROM vote_request_limits WHERE voter_hash=?").get(input.voterHash),
-    { attempts: 12 });
+  assert.equal(db.prepare("SELECT attempts FROM vote_request_limits WHERE voter_hash=?")
+    .get(input.voterHash).attempts, 12);
   const rotated = await checkVoteRate({ ...input, voterHash: "other-session", now: 0, dbQuery });
   assert.deepEqual(rotated, { allowed: false, scope: "network-browser" });
   assert.equal(writes, 53); // The new session is recorded; the shared signal remains blocked.
