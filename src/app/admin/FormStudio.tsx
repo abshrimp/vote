@@ -10,6 +10,7 @@ import RichTextEditor from "./RichTextEditor";
 import AdminEmails from "./AdminEmails";
 import { useEditorHistory } from "./useEditorHistory";
 import { parseRich, plainText } from "@/lib/voting/richtext.mjs";
+import { sortResultCandidates } from "@/lib/voting/result-sort.mjs";
 import RichText from "../ui/RichText";
 import AutoTextarea from "../ui/AutoTextarea";
 import TextStyleControls from "./TextStyleControls";
@@ -151,6 +152,7 @@ export default function FormStudio({ initialData, onLogout }: {
   const [data, setData] = useState(initialData);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [tab, setTab] = useState<"questions" | "responses" | "settings">("questions");
+  const [resultsSort, setResultsSort] = useState<"original" | "votes-desc" | "votes-asc">("original");
   const [selected, setSelected] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
@@ -1240,7 +1242,19 @@ export default function FormStudio({ initialData, onLogout }: {
     </div>}
     {tab === "responses" && <div className={styles.detailsPage}>
       <AbuseReport polls={data.polls.map(p => ({ id: p.id, title: p.title }))} />
-      <div className={styles.panel}><h2>集計</h2>
+      <div className={styles.panel}>
+        <div className={styles.resultsHeader}>
+          <h2>集計</h2>
+          <label className={styles.resultsSort}>
+            <span>候補の表示順</span>
+            <select value={resultsSort}
+              onChange={event => setResultsSort(event.target.value as typeof resultsSort)}>
+              <option value="original">登録順</option>
+              <option value="votes-desc">票数が多い順</option>
+              <option value="votes-asc">票数が少ない順</option>
+            </select>
+          </label>
+        </div>
         <div className={styles.metrics}>
           <div><strong>{totalVotes}</strong><span>投票数（候補別合計）</span></div>
           <div><strong>{data.polls.length}</strong><span>部門数</span></div>
@@ -1248,7 +1262,7 @@ export default function FormStudio({ initialData, onLogout }: {
         </div>
       </div>
       {data.polls.map(p => <section className={styles.panel} key={p.id}><h3>{p.title}</h3>
-        {p.candidates.map(c => <div key={c.id} className={styles.resultsRow}>
+        {sortResultCandidates(p.candidates, resultsSort).map(c => <div key={c.id} className={styles.resultsRow}>
           <span>{c.name}</span><div className={styles.resultTrack}><div className={styles.resultBar}
             style={{ width: (p.candidates.reduce((n,x) => n+Number(x.votes),0)
               ? (Number(c.votes)/p.candidates.reduce((n,x)=>n+Number(x.votes),0))*100 : 0)+"%" }}/></div>
