@@ -2,8 +2,8 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resolveTargets } from "@/lib/voting/links.mjs";
-import { applySelections } from "@/lib/voting/logic.mjs";
+import { candidateElementId, publicIdFromHash, resolveTargets } from "@/lib/voting/links.mjs";
+import { applySelections, withPollSelections } from "@/lib/voting/logic.mjs";
 import styles from "./vote.module.css";
 import Mark from "../Mark";
 import { Dialog, Snackbar, useConfirm } from "../ui/Dialog";
@@ -56,7 +56,12 @@ export default function VoteClient() {
   useWebFonts([settings.headingFont, settings.bodyFont]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState(new Map<string, string>());
+  const [target, setTarget] = useState<Target | null>(null);
+  const chosenTarget = useRef<Target | null>(null);
+  const onFilter = useCallback((pollId: string, filter: string) => {
+    setFilters(previous => new Map(previous).set(pollId, filter));
+  }, []);
   const [toast, setToast] = useState<{ text: string; id: number } | null>(null);
   const [policyOpen, setPolicyOpen] = useState(false);
   const [choices, setChoices] = useState<Target[] | null>(null);
@@ -65,12 +70,21 @@ export default function VoteClient() {
   const dismissToast = useCallback(() => setToast(null), []);
   const [saving, setSaving] = useState<string | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
+  const [scriptFailed, setScriptFailed] = useState(false);
   const [token, setToken] = useState("");
+  const currentToken = useRef("");
+  const updateToken = useCallback((value: string) => {
+    currentToken.current = value;
+    setToken(value);
+  }, []);
   const [challengeOpen, setChallengeOpen] = useState(false);
   const [challengeError, setChallengeError] = useState(false);
-  const challengeDialog = useRef<HTMLDivElement>(null);
+  const challengeDialog = useRef<HTMLDialogElement>(null);
   const widgetElement = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
+  const needsVerification = saving !== null ||
+    polls.some(poll => !poll.voted && poll.candidates.length > 0) ||
+    actions.some(action => action.kind === "claim" && action.eligible && !action.status);
 
   useEffect(() => {
     let mounted = true;
@@ -104,34 +118,22 @@ export default function VoteClient() {
     return () => { mounted = false; };
   }, []);
 
-  // Keep focus inside the challenge while manual verification is required.
+  // A challenge may start while a native vote confirmation is still open.
   useEffect(() => {
-    if (!challengeOpen) return;
     const dialog = challengeDialog.current;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    dialog?.focus();
-    const trapFocus = (event: FocusEvent) => {
-      if (dialog && event.target instanceof Node && !dialog.contains(event.target)) dialog.focus();
-    };
-    document.addEventListener("focusin", trapFocus);
-    return () => {
-      document.removeEventListener("focusin", trapFocus);
-      document.body.style.overflow = previousOverflow;
-      previousFocus?.focus();
-    };
+    if (dialog && challengeOpen && !dialog.open) dialog.showModal();
+    return () => { if (dialog?.open) dialog.close(); };
   }, [challengeOpen]);
 
   useEffect(() => {
-    if (!scriptReady || !siteKey || !widgetElement.current || !window.turnstile) return;
+    if (!needsVerification || !scriptReady || !siteKey || !widgetElement.current || !window.turnstile) return;
     const id = window.turnstile.render(widgetElement.current, {
       sitekey: siteKey,
       action: "festival_vote",
       theme: "light",
       appearance: "interaction-only",
       callback: (value) => {
-        setToken(value);
+        updateToken(value);
         setChallengeOpen(false);
         setChallengeError(false);
       },
@@ -141,12 +143,12 @@ export default function VoteClient() {
       },
       "after-interactive-callback": () => setChallengeOpen(false),
       "expired-callback": () => {
-        setToken("");
+        updateToken("");
         setChallengeOpen(false);
         window.turnstile?.reset(id);
       },
       "error-callback": () => {
-        setToken("");
+        updateToken("");
         setChallengeError(true);
         setChallengeOpen(true);
       },
@@ -155,26 +157,34 @@ export default function VoteClient() {
     return () => {
       window.turnstile?.remove(id);
       widgetId.current = null;
+      updateToken("");
+      setChallengeOpen(false);
+      setChallengeError(false);
     };
-  }, [scriptReady]);
+  }, [needsVerification, scriptReady, updateToken]);
 
-  async function refreshActions() {
-    const response = await fetch("/api/vote/actions", { cache: "no-store" });
-    if (response.ok) setActions((await response.json()).actions ?? []);
+  async function showSuccess(message: string, refreshActions: boolean) {
+    notify(message);
+    if (!refreshActions) return;
+    try {
+      const response = await fetch("/api/vote/actions", { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      setActions((await response.json()).actions ?? []);
+    } catch {
+      notify(message + "。追加機能の状態を更新できませんでした。ページを再読み込みしてください。");
+    }
   }
 
   async function refresh(includePublic = false) {
     // Duplicate rejection changes only personal state. Fetch public candidate
     // data again only when the server signals an exhausted poll limit.
-    const personalRequest = fetch("/api/vote/polls", { cache: "no-store" });
-    const publicRequest = includePublic
-      ? fetch("/api/vote/public", { credentials: "omit" }) : null;
-    const personalResponse = await personalRequest;
-    if (!personalResponse.ok) return;
+    const [personalResponse, publicResponse] = await Promise.all([
+      fetch("/api/vote/polls", { cache: "no-store" }),
+      includePublic ? fetch("/api/vote/public", { credentials: "omit" }) : null,
+    ]);
+    if (!personalResponse.ok || (publicResponse && !publicResponse.ok)) throw new Error();
     const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
-    if (publicRequest) {
-      const publicResponse = await publicRequest;
-      if (!publicResponse.ok) return;
+    if (publicResponse) {
       const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await publicResponse.json();
       setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
       setBlocks(page.blocks ?? []);
@@ -191,23 +201,24 @@ export default function VoteClient() {
     const label = action.config.claimLabel || "引き換える";
     const message = action.config.claimConfirm;
     if (message && !await confirm({ title: message, confirmLabel: label })) return;
+    const verifiedToken = currentToken.current;
+    if (!verifiedToken) { notify("本人確認の完了後にもう一度お試しください。"); return; }
     setSaving(action.id);
     try {
       const response = await fetch("/api/vote/actions", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId: action.id, token, operation: "claim" }),
+        body: JSON.stringify({ actionId: action.id, token: verifiedToken, operation: "claim" }),
       });
       const body: { ok?: boolean; error?: string; redeemedAt?: string; refreshRequired?: boolean } = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.error ?? "操作できませんでした。");
       setActions(old => old.map(item => item.id === action.id
         ? { ...item, status: "used", eligible: true, usedAt: body.redeemedAt ?? null }
         : item));
-      if (body.refreshRequired !== false) await refreshActions();
-      notify("「" + action.title + "」を引き換えました");
+      await showSuccess("「" + action.title + "」を引き換えました", body.refreshRequired !== false);
     } catch (error) {
       notify(error instanceof Error ? error.message : "エラーが発生しました。");
     } finally {
-      setToken("");
+      updateToken("");
       setChallengeOpen(false);
       setChallengeError(false);
       if (widgetId.current) window.turnstile?.reset(widgetId.current);
@@ -230,6 +241,8 @@ export default function VoteClient() {
       confirmLabel: "投票する",
     });
     if (!ok) return;
+    const verifiedToken = currentToken.current;
+    if (!verifiedToken) { notify("本人確認の完了後にもう一度お試しください。"); return; }
     setSaving(poll.id);
     try {
       const response = await fetch("/api/vote/cast", {
@@ -240,28 +253,30 @@ export default function VoteClient() {
         body: JSON.stringify({
           pollId: poll.id,
           candidateId,
-          token,
+          token: verifiedToken,
           fingerprint: fingerprint(),
         }),
       });
       const data: { ok?: boolean; code?: string; message?: string } = await response.json();
       if (response.ok && data.ok) {
         // Update locally instead of re-reading every poll and candidate (saves Turso rows read).
-        setPolls(old => old.map(p => p.id !== poll.id ? p : {
-          ...p, selectedIds: [...p.selectedIds, candidateId], voted: p.selectedIds.length + 1 >= p.maxVotes,
-        }));
-        if (actions.length) await refreshActions();
-        setSelected(old => ({ ...old, [poll.id]: "" }));
-        notify("「" + (candidate?.name ?? "") + "」に投票しました");
+        setPolls(old => old.map(p => p.id === poll.id
+          ? withPollSelections(p, [...p.selectedIds, candidateId], p.conditionIds) : p));
+        await showSuccess("「" + (candidate?.name ?? "") + "」に投票しました", actions.length > 0);
       } else {
-        if (data.code === "ALREADY_VOTED") await refresh(true);
-        else if (data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
-        notify(data.message ?? "投票に失敗しました。");
+        const message = data.message ?? "投票に失敗しました。";
+        try {
+          if (data.code === "ALREADY_VOTED") await refresh(true);
+          else if (data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
+          notify(message);
+        } catch {
+          notify(message + " ページを再読み込みして投票状況を確認してください。");
+        }
       }
     } catch {
       notify("通信に失敗しました。再読み込みして投票状況を確認してください。");
     } finally {
-      setToken("");
+      updateToken("");
       setChallengeOpen(false);
       setChallengeError(false);
       if (widgetId.current) window.turnstile?.reset(widgetId.current);
@@ -270,14 +285,24 @@ export default function VoteClient() {
   }
 
   const jumpTo = useCallback((target: Target) => {
-    const elementId = target.candidateId ? "candidate-" + target.candidateId : "poll-" + target.pollId;
+    if (target.candidateId && !document.getElementById(candidateElementId(target.pollId, target.candidateId))) {
+      onFilter(target.pollId, "");
+    }
+    setTarget(target);
+  }, [onFilter]);
+
+  // A filtered-out candidate returns to the DOM after the filter update commits.
+  useEffect(() => {
+    if (!target) return;
+    const elementId = target.candidateId ? candidateElementId(target.pollId, target.candidateId) : "poll-" + target.pollId;
     const node = document.getElementById(elementId);
-    if (!node) return;
-    node.scrollIntoView({ behavior: "smooth", block: "center" });
-    node.classList.remove(styles.flash);
-    void node.offsetWidth; // restart the highlight animation
-    node.classList.add(styles.flash);
-  }, []);
+    if (node) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      node.classList.remove(styles.flash);
+      void node.offsetWidth;
+      node.classList.add(styles.flash);
+    }
+  }, [target]);
 
   // In-page links ("#section" from the editor, or "#公開ID" of a department/candidate) scroll inside the page.
   const jumpToAnchor = useCallback((anchor: string) => {
@@ -295,28 +320,36 @@ export default function VoteClient() {
     return targets.length > 0;
   }, [polls, jumpTo]);
   useEffect(() => {
-    if (loading) return;
-    const hash = decodeURIComponent(window.location.hash.slice(1));
-    if (hash && !new URLSearchParams(window.location.search).get("id")) jumpToAnchor(hash);
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (loading || loadError) return;
+    const followHash = () => {
+      const id = publicIdFromHash(window.location.hash);
+      if (id) jumpToAnchor(id);
+    };
+    window.addEventListener("hashchange", followHash);
+    return () => window.removeEventListener("hashchange", followHash);
+  }, [loading, loadError, jumpToAnchor]);
 
   // ?id= jumps to a candidate; ?category= selects a department.
   // Repeated candidate IDs open the department chooser.
   const linkHandled = useRef(false);
   useEffect(() => {
-    if (loading || !polls.length || linkHandled.current) return;
+    if (loading || loadError || linkHandled.current) return;
     linkHandled.current = true;
     const params = new URLSearchParams(window.location.search);
     const id = params.get("id");
     const category = params.get("category");
-    if (!id && !category) return;
+    if (!id && !category) {
+      const anchor = publicIdFromHash(window.location.hash);
+      if (anchor) jumpToAnchor(anchor);
+      return;
+    }
     const targets: Target[] = id
       ? resolveTargets(id, polls, category)
       : resolveTargets(category!, polls).filter(target => target.candidateId === null);
     if (targets.length === 1) jumpTo(targets[0]);
     else if (targets.length > 1) setChoices(targets);
     else notify("指定された部門または候補が見つかりませんでした。");
-  }, [loading, polls, jumpTo, notify]);
+  }, [loading, loadError, polls, jumpTo, jumpToAnchor, notify]);
 
   // The first heading block is the form title set in the admin editor.
   const formHeader = blocks.find(block => block.kind === "heading");
@@ -326,23 +359,25 @@ export default function VoteClient() {
   useEffect(() => {
     if (!loading) document.title = pageTitle;
   }, [loading, pageTitle]);
-  // A custom logo also replaces the browser tab icon.
   useEffect(() => {
     if (!settings.logo) return;
-    let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");
-    if (!link) { link = document.createElement("link"); link.rel = "icon"; document.head.appendChild(link); }
-    link.href = settings.logo;
+    const defaultIcon = document.querySelector<HTMLLinkElement>('link[rel~="icon"][href="/default-icon.svg"]');
+    if (!defaultIcon) return;
+    defaultIcon.href = settings.logo;
+    return () => { defaultIcon.href = "/default-icon.svg"; };
   }, [settings.logo]);
 
-  const completed = polls.filter(poll => poll.voted || poll.selectedIds.length >= poll.maxVotes).length;
-  const progress = polls.length ? completed / polls.length : 0;
+  const availablePolls = polls.filter(poll => poll.candidates.length > 0);
+  const completed = availablePolls.filter(poll => poll.voted).length;
+  const progress = availablePolls.length ? completed / availablePolls.length : 0;
 
   return (
     <main className={styles.main} style={themeVars(settings)} onClick={event => {
       const link = (event.target as Element).closest?.("a[data-section-link]");
       if (!link) return;
       event.preventDefault();
-      jumpToAnchor((link.getAttribute("href") ?? "").slice(1));
+      const id = publicIdFromHash(link.getAttribute("href") ?? "");
+      if (id) jumpToAnchor(id);
     }}>
       <header className={styles.appbar}>
         {settings.officialUrl && <button type="button" className={styles.appbarIcon} aria-label="前のページに戻る" title="戻る"
@@ -356,21 +391,21 @@ export default function VoteClient() {
         {!loading && (settings.logo ? <img src={settings.logo} alt="" className={styles.mark} /> : <Mark className={styles.mark} />)}
         <span className={styles.appbarTitle}>{loading ? "" : pageTitle}</span>
         <span className={styles.appbarSpacer} />
-        {!loading && polls.length > 0 && <span className={styles.appbarProgress}>
-          {completed} / {polls.length} 部門
+        {availablePolls.length > 0 && <span className={styles.appbarProgress}>
+          {completed} / {availablePolls.length} 部門
         </span>}
         {settings.officialUrl && <a className={styles.homeLink} href={settings.officialUrl} aria-label="公式サイト">
           <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor"
             d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
           <span>公式サイト</span>
         </a>}
-        {!loading && polls.length > 0 && <div className={styles.progressTrack} role="progressbar"
-          aria-label="投票済みの部門" aria-valuemin={0} aria-valuemax={polls.length} aria-valuenow={completed}>
+        {availablePolls.length > 0 && <div className={styles.progressTrack} role="progressbar"
+          aria-label="投票済みの部門" aria-valuemin={0} aria-valuemax={availablePolls.length} aria-valuenow={completed}>
           <div className={styles.progressBar} style={{ transform: `scaleX(${progress})` }} />
         </div>}
       </header>
       <div className={styles.container}>
-        <header className={styles.header}>
+        <header className={styles.header} data-section={formHeader?.id}>
           {loading ? <>
             <span className={`${styles.skeletonTitle} ${styles.skeletonHeading}`} aria-hidden="true" />
             <span className={styles.skeletonLine} aria-hidden="true" />
@@ -396,27 +431,29 @@ export default function VoteClient() {
         )}
         {!loading && !loadError && <VoteBoard
           polls={polls} actions={actions} blocks={bodyBlocks}
-          selected={selected} setSelected={setSelected}
+          filters={filters} onFilter={onFilter}
           saving={saving} token={token} siteKey={siteKey}
           submit={submit} claimAction={claimAction} openLink={openLink}
         />}
-        {!loading && (polls.some((poll) => !poll.voted) || actions.some(action => action.kind === "claim" && action.eligible && !action.status)) && (
+        {needsVerification && (
           siteKey ? (
             <>
               <Script
                 src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
                 strategy="afterInteractive"
-                onReady={() => setScriptReady(true)}
+                onReady={() => { setScriptReady(true); setScriptFailed(false); }}
+                onError={() => setScriptFailed(true)}
               />
-              {challengeOpen && <div className={styles.turnstileBackdrop} aria-hidden="true" />}
+              {scriptFailed && <section className={styles.turnstileArea}>
+                <p className={styles.error} role="alert">本人確認を読み込めませんでした。通信環境を確認して再読み込みしてください。</p>
+                <button type="button" className={styles.turnstileRetry} onClick={() => window.location.reload()}>再読み込み</button>
+              </section>}
               {/* The widget stays mounted and visible to Cloudflare during background verification. */}
-              <div
-                key="turnstile-host"
+              <dialog
                 ref={challengeDialog}
                 className={`${styles.turnstileHost} ${challengeOpen ? styles.turnstileDialog : styles.turnstileIdle}`}
-                role={challengeOpen ? "dialog" : undefined}
-                aria-modal={challengeOpen ? "true" : undefined}
-                aria-labelledby={challengeOpen ? "turnstile-dialog-title" : undefined}
+                aria-labelledby="turnstile-dialog-title"
+                onCancel={event => event.preventDefault()}
                 tabIndex={-1}
               >
                 <div hidden={!challengeOpen}>
@@ -432,7 +469,7 @@ export default function VoteClient() {
                     if (widgetId.current) window.turnstile?.reset(widgetId.current);
                   }}>再試行する</button>
                 </>}
-              </div>
+              </dialog>
             </>
           ) : (
             <section className={styles.turnstileArea} aria-label="不正投票防止認証">
@@ -451,7 +488,11 @@ export default function VoteClient() {
       <Dialog open={policyOpen} onClose={() => setPolicyOpen(false)} title="プライバシーポリシー" size="large">
         <PrivacyPolicy organizerName={settings.organizerName} contactEmail={settings.contactEmail} />
       </Dialog>
-      <Dialog open={choices !== null} onClose={() => setChoices(null)} title="どの部門に投票しますか？" focusDialog>
+      <Dialog open={choices !== null} onClose={() => setChoices(null)} title="どの部門に投票しますか？" focusDialog
+        onClosed={() => {
+          if (chosenTarget.current) jumpTo(chosenTarget.current);
+          chosenTarget.current = null;
+        }}>
         <p className={styles.choiceLead}>この候補は複数の部門にエントリーしています。</p>
         <ul className={styles.choiceList}>
           {(choices ?? []).map(target => {
@@ -462,8 +503,8 @@ export default function VoteClient() {
             const already = candidate ? poll.selectedIds.includes(candidate.id) : false;
             return <li key={target.pollId + ":" + target.candidateId}>
               <button type="button" className={styles.choiceItem} onClick={() => {
+                chosenTarget.current = target;
                 setChoices(null);
-                window.setTimeout(() => jumpTo(target), 120);
               }}>
                 <span className={styles.choiceText}>
                   <strong>{poll.title}</strong>

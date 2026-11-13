@@ -14,7 +14,7 @@ export function visitorActions(definitions, votes, claims) {
   if (!definitions.length) return [];
   const facts = visitorFacts(votes, claims);
   const claimed = new Map(claims.map(row => [String(row.action_id), String(row.redeemed_at)]));
-  return definitions.map(action => {
+  return definitions.filter(action => !action.hidden).map(action => {
     const redeemedAt = action.kind === "claim" ? claimed.get(String(action.id)) : undefined;
     const eligible = Boolean(redeemedAt) ||
       evaluateCondition(JSON.parse(String(action.condition_json)), facts);

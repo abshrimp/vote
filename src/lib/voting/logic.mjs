@@ -28,32 +28,31 @@ export function newVoteStatement({
   return { sql,args };
 }
 
+export function pollVoteLimit(poll) {
+  return Math.min(poll.maxVotes, poll.candidates.length);
+}
+
+export function withPollSelections(poll, selectedIds, conditionIds) {
+  const limit = pollVoteLimit(poll);
+  return {
+    ...poll, selectedIds, conditionIds,
+    voted: conditionIds.length > 0 || (limit > 0 && selectedIds.length >= limit),
+  };
+}
+
 export function groupPolls(rows, selections = []) {
-  const officialByPoll = new Map();
-  const conditionByPoll = new Map();
-  for (const item of selections) {
-    const byPoll = Number(item.is_official) === 1 ? officialByPoll : conditionByPoll;
-    if (!byPoll.has(item.poll_id)) byPoll.set(item.poll_id, new Set());
-    byPoll.get(item.poll_id).add(item.candidate_id);
-  }
   const polls = new Map();
   for (const row of rows) {
     if (!polls.has(row.poll_id)) {
-      const selectedIds = Array.from(officialByPoll.get(row.poll_id) ?? []);
-      const conditionIds = Array.from(conditionByPoll.get(row.poll_id) ?? []);
-      const maxVotes = Number(row.max_votes ?? 1);
       polls.set(row.poll_id, {
         id: row.poll_id,
         publicId: row.poll_public_id ?? null,
         title: row.title,
         description: row.description,
-        maxVotes,
+        maxVotes: Number(row.max_votes ?? 1),
         nameFontSize: Number(row.name_font_size ?? 16),
         columns: parseColumns(row.columns_json),
         nameStyle: parseNameStyle(row.columns_json),
-        selectedIds,
-        conditionIds,
-        voted: conditionIds.length > 0 || selectedIds.length >= maxVotes,
         candidates: [],
       });
     }
@@ -66,11 +65,7 @@ export function groupPolls(rows, selections = []) {
       });
     }
   }
-  return Array.from(polls.values()).map(poll => ({
-    ...poll,
-    voted: poll.conditionIds.length > 0 ||
-      poll.selectedIds.length >= Math.min(poll.maxVotes, poll.candidates.length),
-  }));
+  return applySelections(Array.from(polls.values()), selections);
 }
 
 /** Apply only private voter rows to already cached public polls. */
@@ -85,10 +80,6 @@ export function applySelections(polls, selections = []) {
   return polls.map(poll => {
     const selectedIds = [...(official.get(poll.id) ?? [])];
     const conditionIds = [...(conditional.get(poll.id) ?? [])];
-    return {
-      ...poll, selectedIds, conditionIds,
-      voted: conditionIds.length > 0 ||
-        selectedIds.length >= Math.min(poll.maxVotes, poll.candidates.length),
-    };
+    return withPollSelections(poll, selectedIds, conditionIds);
   });
 }

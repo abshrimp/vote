@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   createSession, readSession, hmac, cookieName, getClientIp, canonicalDeviceSignal,
 } from "../src/lib/voting/security.mjs";
-import { validId, groupPolls, newVoteStatement } from "../src/lib/voting/logic.mjs";
+import { validId, groupPolls, newVoteStatement, pollVoteLimit, withPollSelections } from "../src/lib/voting/logic.mjs";
 import { tursoHttpUrl, encodeArg, query } from "../src/lib/voting/turso.mjs";
 
 const secret = "this-is-a-long-test-only-secret-123456789";
@@ -128,6 +128,18 @@ test("multi-vote grouping reports selected candidates and limits", () => {
   assert.deepEqual(result[0].selectedIds, ["a"]);
   selected.push({ poll_id: "p", candidate_id: "c", is_official: 1 });
   assert.equal(groupPolls(rows, selected)[0].voted, true);
+});
+
+test("casting the last available vote matches reloading, even when the configured limit is higher", () => {
+  const row = { poll_id: "food", title: "Food", max_votes: 3, candidate_id: "a", candidate_name: "A" };
+  const [poll] = groupPolls([row]);
+  const [afterReload] = groupPolls([row], [{ poll_id: "food", candidate_id: "a", is_official: 1 }]);
+  assert.equal(pollVoteLimit(poll), 1);
+  assert.equal(afterReload.voted, true);
+  assert.deepEqual(withPollSelections(poll, ["a"], []), afterReload);
+  const [empty] = groupPolls([{ ...row, candidate_id: null }]);
+  assert.equal(pollVoteLimit(empty), 0);
+  assert.equal(empty.voted, false);
 });
 
 test("conditional actions validate an explicit and/or rule language", async () => {

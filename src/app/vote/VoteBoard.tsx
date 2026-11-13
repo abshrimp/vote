@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { candidateElementId } from "@/lib/voting/links.mjs";
 import styles from "./vote.module.css";
 import RichText from "../ui/RichText";
 import { textStyle, type TextStyle } from "../ui/textStyle";
 import { composeLayout } from "@/lib/voting/layout.mjs";
+import { pollVoteLimit } from "@/lib/voting/logic.mjs";
 
 export type Poll = {
   id: string;
@@ -42,13 +43,13 @@ export type LayoutBlock = {
 };
 
 export default function VoteBoard({
-  polls, actions, blocks, selected, setSelected, saving, token, siteKey, submit, claimAction, openLink,
+  polls, actions, blocks, filters, onFilter, saving, token, siteKey, submit, claimAction, openLink,
 }: {
   polls: Poll[];
   actions: Action[];
   blocks: LayoutBlock[];
-  selected: Record<string,string>;
-  setSelected: Dispatch<SetStateAction<Record<string,string>>>;
+  filters: ReadonlyMap<string, string>;
+  onFilter: (pollId: string, filter: string) => void;
   saving: string | null;
   token: string;
   siteKey: string;
@@ -56,7 +57,6 @@ export default function VoteBoard({
   claimAction: (action: Action) => Promise<void>;
   openLink: (action: Action) => Promise<void>;
 }) {
-  const [filters, setFilters] = useState<Record<string,string>>({});
   const pollMap = new Map(polls.map(p => [p.id, p]));
   const actionMap = new Map(actions.map(a => [a.id, a]));
   return <div className={styles.board}>
@@ -76,27 +76,29 @@ export default function VoteBoard({
       if (item.kind === "poll") {
         const poll = pollMap.get(item.pollId ?? "");
         if (!poll) return null;
-        const done = poll.voted || poll.conditionIds.length > 0 || poll.selectedIds.length >= poll.maxVotes;
+        const limit = pollVoteLimit(poll);
+        const done = poll.voted;
         return <section key={item.id} id={"poll-" + poll.id} data-section={item.id} className={styles.card}>
           <div className={styles.cardHead}>
             <div>
               <h2>{poll.title}</h2>
               {poll.description && <RichText className={styles.description} value={poll.description}/>}
             </div>
-            <span className={done ? `${styles.counter} ${styles.counterDone}` : styles.counter}
-              aria-label={`この部門は${poll.maxVotes}票中${poll.selectedIds.length}票が正式投票、${poll.conditionIds.length}件が条件判定用`}>
-              {poll.selectedIds.length + poll.conditionIds.length} / {poll.maxVotes} 件
-            </span>
+            {limit > 0 && <span className={done ? `${styles.counter} ${styles.counterDone}` : styles.counter}
+              aria-label={`この部門は${limit}票中${poll.selectedIds.length}票が正式投票、${poll.conditionIds.length}件が条件判定用`}>
+              {poll.selectedIds.length + poll.conditionIds.length} / {limit} 件
+            </span>}
           </div>
+          {limit === 0 && <p className={styles.description}>現在投票できる候補はありません。</p>}
           {poll.conditionIds.length > 0 && <p className={styles.description}>この端末では既に投票済みの可能性があります。この部門は追加投票できません。条件判定には反映されています。</p>}
           {poll.candidates.length > 15 && <input className={styles.candidateSearch}
             type="search" placeholder="候補名で検索" aria-label={poll.title+"の候補を検索"}
-            value={filters[poll.id]??""} onChange={event=>setFilters(old=>({...old,[poll.id]:event.target.value}))}/>}
+            value={filters.get(poll.id) ?? ""} onChange={event => onFilter(poll.id, event.target.value)}/>}
           <div className={styles.choices} role="group" aria-label={poll.title + " の候補"}>
-            {poll.candidates.filter(candidate=>candidate.name.toLowerCase().includes((filters[poll.id]??"").toLowerCase())).map(candidate => {
+            {poll.candidates.filter(candidate=>candidate.name.toLowerCase().includes((filters.get(poll.id) ?? "").toLowerCase())).map(candidate => {
               const already = poll.selectedIds.includes(candidate.id);
               return <div className={styles.candidateVote} key={candidate.id}
-                id={"candidate-" + candidate.id}>
+                id={candidateElementId(poll.id, candidate.id)}>
                 <div className={styles.candidateDetails}>
                   <span className={styles.candidateName} style={textStyle(poll.nameFontSize, poll.nameStyle)}>{candidate.name}</span>
                   {poll.columns.filter(col=>(candidate.extra?.[col.key]??"").trim()).map(col=><div className={styles.candidateExtra} key={col.key} style={{fontSize:col.fontSize}}>

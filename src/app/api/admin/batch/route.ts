@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdmin, sameOrigin, cleanText, validRange, validateAction, actionConfig } from "@/lib/voting/admin.mjs";
+import { updateStudioPollStatement } from "@/lib/voting/admin-update.mjs";
 import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
@@ -24,6 +25,7 @@ const fail = (message: string, status = 400) =>
 
 function prepare(operations: Operation[]) {
   const steps: { sql: string; args: (string | number | null)[] }[] = [];
+  const pollUpdates: typeof steps = [];
   const publicIdUpdates: { sql: string; args: (string | number | null)[] }[] = [];
   const layoutOrder: { sql: string; args: (string | number | null)[] }[] = [];
   const candidateOrder: { sql: string; args: (string | number | null)[] }[] = [];
@@ -37,13 +39,11 @@ function prepare(operations: Operation[]) {
           !Number.isInteger(max) || max < 1 || max > 20 ||
           !validFontSize(op.nameFontSize) || !validColumns(op.columns) ||
           (op.nameStyle !== undefined && !validStyle(op.nameStyle)) || typeof op.isPublished !== "boolean") throw Error("部門の入力が正しくありません。");
-        const values = [title, description, max, op.nameFontSize as number,
-          serializeColumns(op.columns as Parameters<typeof serializeColumns>[0], (op.nameStyle ?? {}) as Record<string, unknown>),
-          op.startsAt as string, op.endsAt as string, Number(op.isPublished)];
-        steps.push({ sql: "UPDATE polls SET title=?,description=?,max_votes=?,name_font_size=?,columns_json=?,starts_at=?,ends_at=?,is_published=? " +
-          "WHERE id=? AND (title IS NOT ? OR description IS NOT ? OR max_votes IS NOT ? OR name_font_size IS NOT ? " +
-          "OR columns_json IS NOT ? OR starts_at IS NOT ? OR ends_at IS NOT ? OR is_published IS NOT ?)",
-          args: [...values, op.id as string, ...values] });
+        pollUpdates.push(updateStudioPollStatement({
+          id: op.id, title, description, maxVotes: max, nameFontSize: op.nameFontSize,
+          columnsJson: serializeColumns(op.columns as Parameters<typeof serializeColumns>[0], (op.nameStyle ?? {}) as Record<string, unknown>),
+          startsAt: op.startsAt, endsAt: op.endsAt, isPublished: op.isPublished,
+        }));
         break;
       }
       case "poll_new": {
@@ -219,8 +219,8 @@ function prepare(operations: Operation[]) {
       }
     }
   }
-  // Positions are applied after inserts and deletions and skip unchanged rows.
-  steps.push(...candidateOrder, ...layoutOrder);
+  // Lower limits against the votes remaining after candidate deletions in this save.
+  steps.push(...pollUpdates, ...candidateOrder, ...layoutOrder);
   return steps;
 }
 
@@ -275,6 +275,9 @@ export async function POST(request: NextRequest) {
     await transaction(steps);
     return NextResponse.json({ ok: true, saved: operations.length }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
+    if (error instanceof Error && /NOT NULL constraint failed: polls\.max_votes/i.test(error.message)) {
+      return fail("既存の投票数より少ない上限には変更できません。", 409);
+    }
     if (error instanceof Error && /Public ID conflict|UNIQUE constraint failed: (polls|candidates)\.public_id/i.test(error.message)) {
       return fail("公開IDが重複しています。部門の公開IDはほかの部門・候補と、候補の公開IDは同じ部門の中で重ならないようにしてください。", 409);
     }
