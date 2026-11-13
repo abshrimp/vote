@@ -331,7 +331,26 @@ export default function FormStudio({ initialData, onLogout }: {
       const result=await response.json();
       if(!response.ok)throw Error(result.error||"保存できませんでした。");
       setSelected(null);setPollDraft(null);setActionDraft(null);
-      await reload();
+      const layoutOnly = operations.every(op =>
+        ["setting", "block", "block_new", "block_delete", "layout_order"].includes(op.type));
+      if (!layoutOnly) {
+        await reload();
+      } else if (operations.some(op => op.type !== "setting")) {
+        // A page-layout edit does not change polls or candidates. Avoid the
+        // 196-row admin fetch; only reload the seven layout rows and settings.
+        const layoutResponse = await fetch("/api/admin/layout", { cache: "no-store" });
+        const layout = await layoutResponse.json();
+        if (!layoutResponse.ok) throw Error(layout.error || "フォーム構成を取得できません。");
+        setBlocks(layout.blocks ?? []);
+        setTheme(layout.settings ?? {});
+        setPending({});
+        setLayoutDirty(false);
+      } else {
+        // Settings are already reflected in local state, and the transaction
+        // succeeded: no Turso SELECT is needed just to confirm their values.
+        setPending({});
+        setLayoutDirty(false);
+      }
       setNotice("変更を保存しました");
     }catch(e){setNotice(e instanceof Error?e.message:"保存できませんでした。");}
     finally{setBusy(false);}
