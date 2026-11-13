@@ -12,7 +12,7 @@ import RichText from "../ui/RichText";
 import AutoTextarea from "../ui/AutoTextarea";
 import TextStyleControls from "./TextStyleControls";
 import { textStyle, type TextStyle } from "../ui/textStyle";
-import { fontFamily, fontOptions, themeColors, themeRoles, themeVars, useWebFonts, type ColorKey, type ThemeSettings } from "../ui/theme";
+import { fontFamily, fontOptions, themeRoles, themeVars, useWebFonts, type ColorKey, type ThemeSettings } from "../ui/theme";
 import { Dialog } from "../ui/Dialog";
 import { Snackbar, useConfirm } from "../ui/Dialog";
 
@@ -639,8 +639,53 @@ export default function FormStudio({ initialData, onLogout }: {
 
   async function chooseLogo(file: File | undefined) {
     if (!file) return;
-    try { changeSetting("logo", await logoDataUrl(file)); }
-    catch (error) { setNotice(error instanceof Error ? error.message : "画像を読み込めませんでした。"); }
+    try {
+      const logo = await logoDataUrl(file);
+      const url = URL.createObjectURL(file);
+      try {
+        const img = new Image();
+        img.src = url;
+        await img.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 32;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, 32, 32);
+        const blob = await new Promise<Blob>((resolve, reject) =>
+          canvas.toBlob(b => b ? resolve(b) : reject(Error("ICO変換に失敗しました。")), "image/png"));
+        const png = new Uint8Array(await blob.arrayBuffer());
+        const ico = new Uint8Array(22 + png.length);
+        const view = new DataView(ico.buffer);
+        view.setUint16(2, 1, true);
+        view.setUint16(4, 1, true);
+        ico[6] = ico[7] = 32;
+        view.setUint16(10, 1, true);
+        view.setUint16(12, 32, true);
+        view.setUint32(14, png.length, true);
+        view.setUint32(18, 22, true);
+        ico.set(png, 22);
+        const bytes = Array.from(ico, byte => String.fromCharCode(byte)).join("");
+        changeSetting("logo", logo);
+        changeSetting("favicon", "data:image/x-icon;base64," + btoa(bytes));
+      } finally { URL.revokeObjectURL(url); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "画像を読み込めませんでした。"); }
+  }
+
+  async function chooseOgp(file: File | undefined) {
+    if (!file) return;
+    try {
+      if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 10_000_000)
+        throw Error("10MB以下のPNG・JPEG・WebPを選んでください。");
+      const image = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 630;
+      const scale = Math.max(1200 / image.width, 630 / image.height);
+      canvas.getContext("2d")!.drawImage(image, (1200 - scale * image.width) / 2,
+        (630 - scale * image.height) / 2, scale * image.width, scale * image.height);
+      image.close();
+      const data = canvas.toDataURL("image/jpeg", 0.78);
+      if (data.length > 450000) throw Error("画像が大きすぎます。");
+      changeSetting("ogp", data);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "OGP画像を読み込めませんでした。"); }
   }
 
   async function resetResults() {
@@ -1023,16 +1068,7 @@ export default function FormStudio({ initialData, onLogout }: {
     {tab === "settings" && <div className={styles.detailsPage}><section className={styles.panel}>
       <h2>デザイン</h2>
       <p className={styles.subtle}>投票ページで使う色とロゴを変えられます。「保存」で反映されます。</p>
-      <h3 className={styles.designHeading}>メインカラー</h3>
-      <div className={styles.themePicker} role="radiogroup" aria-label="メインカラー">
-        {themeColors.map(color => <button key={color.value} type="button" role="radio"
-          aria-checked={roleValue("themeColor") === color.value} aria-label={color.label} data-tip={color.label}
-          className={roleValue("themeColor") === color.value ? `${styles.themeSwatch} ${styles.themeSelected}` : styles.themeSwatch}
-          style={{ background: color.value }} onClick={() => changeSetting("themeColor", color.value)}>
-          {roleValue("themeColor") === color.value && <Icon d={icons.check}/>}
-        </button>)}
-      </div>
-      <h3 className={styles.designHeading}>色の詳細</h3>
+      <h3 className={styles.designHeading}>色の設定</h3>
       <div className={styles.settingList}>
         {themeRoles.map(role => <div className={styles.settingRow} key={role.key}>
           <span className={styles.settingLabel}>{role.label}<small>{role.hint}</small></span>
@@ -1056,10 +1092,14 @@ export default function FormStudio({ initialData, onLogout }: {
             <span className={styles.settingLabel}>{label}<small>{hint}</small>
               <span className={styles.fontSample} style={{ fontFamily: fontFamily(theme[key]) }}>{sample}</span></span>
             <span className={styles.settingControl}>
-              <select className={styles.fontSelect} aria-label={label + "のフォント"} value={theme[key] ?? "system"}
-                onChange={e => changeSetting(key, e.target.value === "system" ? undefined : e.target.value)}>
+              <select className={styles.fontSelect} aria-label={label + "のフォント"} value={theme[key]?.startsWith("google:") ? "custom" : (theme[key] ?? "system")}
+                onChange={e => changeSetting(key, e.target.value === "system" ? undefined : e.target.value === "custom" ? "google:" : e.target.value)}>
                 {fontOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                 <option value="custom">Google Fonts から指定</option>
               </select>
+               {theme[key]?.startsWith("google:") && <input className={styles.wideInput}
+                 aria-label={label + "のGoogle Fonts名"} placeholder="例：Roboto"
+                 value={theme[key].slice(7)} onChange={e => changeSetting(key, "google:" + e.target.value)} />}
             </span>
           </div>)}
       </div>
@@ -1069,7 +1109,7 @@ export default function FormStudio({ initialData, onLogout }: {
         <div className={styles.settingRow}>
           <span className={styles.logoPreview}>
             {theme.logo ? <img src={theme.logo} alt="" /> : <Mark size={36}/>}
-            <span className={styles.settingLabel}>左上のロゴとタブのアイコン<small>SVG・PNG・JPEG・WebP。正方形に近い画像がおすすめです</small></span>
+            <span className={styles.settingLabel}>左上のロゴとページアイコン<small>SVG・PNG・JPEG・WebP。アップロード時にICOに変換します</small></span>
           </span>
           <span className={styles.settingControl}>
             <label className={styles.tonalButton + " " + styles.fileButton}>画像を選択
@@ -1077,7 +1117,23 @@ export default function FormStudio({ initialData, onLogout }: {
                 onChange={e => { void chooseLogo(e.target.files?.[0]); e.target.value = ""; }}/>
             </label>
             <button type="button" className={styles.iconButton} data-tip="既定に戻す" aria-label="ロゴを既定に戻す"
-              disabled={!theme.logo} onClick={() => changeSetting("logo", undefined)}><Icon d={icons.refresh}/></button>
+              disabled={!theme.logo} onClick={() => { changeSetting("logo", undefined); changeSetting("favicon", undefined); }}><Icon d={icons.refresh}/></button>
+          </span>
+        </div>
+      </div>
+      <div className={styles.settingList}>
+        <div className={styles.settingRow}>
+          <span className={styles.logoPreview}>
+            {theme.ogp && <img src={theme.ogp} alt="" />}
+            <span className={styles.settingLabel}>OGP画像<small>1200×630。PNG・JPEG・WebP</small></span>
+          </span>
+          <span className={styles.settingControl}>
+            <label className={styles.tonalButton + " " + styles.fileButton}>画像を選択
+              <input type="file" accept="image/png,image/jpeg,image/webp"
+                onChange={e => { void chooseOgp(e.target.files?.[0]); e.target.value = ""; }}/>
+            </label>
+            <button type="button" className={styles.iconButton} aria-label="OGPを既定に戻す"
+              disabled={!theme.ogp} onClick={() => changeSetting("ogp", undefined)}><Icon d={icons.refresh}/></button>
           </span>
         </div>
       </div>
