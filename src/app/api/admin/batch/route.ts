@@ -178,17 +178,22 @@ function prepare(operations: Operation[]) {
     }
   }
   if (publicIdUpdates.length === 1) {
-    // The common case is one edited public ID: a direct UPDATE writes one row,
-    // not an unnecessary clear followed by a second write.
-    steps.push(publicIdUpdates[0]);
+    // An unchanged ID is a zero-row update, including repeated clears.
+    const update = publicIdUpdates[0];
+    steps.push({ sql: update.sql + " AND public_id IS NOT ?",
+      args: [...update.args, update.args[0]] });
   } else {
-    // Multiple IDs may be swapped in one save. Release conflicting old
-    // identifiers before assigning new ones, within the same transaction.
+    // Multi-entity swaps require releasing old aliases first. Skip an
+    // already-null row and avoid a redundant second write for clear requests.
     for (const update of publicIdUpdates) {
-      steps.push({ sql: update.sql, args: [null, ...update.args.slice(1)] });
+      steps.push({ sql: update.sql + " AND public_id IS NOT NULL",
+        args: [null, ...update.args.slice(1)] });
     }
     for (const update of publicIdUpdates) {
-      if (update.args[0] !== null) steps.push(update);
+      if (update.args[0] !== null) {
+        steps.push({ sql: update.sql + " AND public_id IS NOT ?",
+          args: [...update.args, update.args[0]] });
+      }
     }
   }
   // Positions are applied last, after every new block exists.
