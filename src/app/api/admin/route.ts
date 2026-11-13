@@ -4,6 +4,7 @@ import { isAdmin, sameOrigin, cleanText, validRange, validateAction, actionConfi
 import { validId } from "@/lib/voting/logic.mjs";
 import { parseColumns, parseCells, parseNameStyle } from "@/lib/voting/columns.mjs";
 import { query, readBatch } from "@/lib/voting/turso.mjs";
+import { updatePollStatement } from "@/lib/voting/admin-update.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -110,21 +111,17 @@ export async function POST(request: NextRequest) {
         if (!validId(body.id) || !title || description === null ||
           !validRange(body.startsAt, body.endsAt) ||
           !Number.isInteger(maxVotes) || maxVotes < 1 || maxVotes > 20) return invalid();
-        const current = await query("SELECT max_votes FROM polls WHERE id=?", [body.id]);
-        if (!current.rows.length) return response({ error: "部門が見つかりません。" }, 404);
-        // Reducing limits below already-recorded selections is not allowed.
-        const over = await query(
-          "SELECT MAX(n) AS largest FROM (" +
-          "SELECT voter_hash, COUNT(*) AS n FROM votes WHERE poll_id=? GROUP BY voter_hash)",
-          [body.id],
-        );
-        if (Number(over.rows[0]?.largest ?? 0) > maxVotes) {
+        const update = updatePollStatement({
+          id: body.id, title, description, startsAt: body.startsAt, endsAt: body.endsAt,
+          isPublished: bool(body.isPublished), maxVotes,
+        });
+        const updated = await query(update.sql, update.args);
+        if (!updated.rows.length) {
+          // Only the unusual missing/rejected path needs an extra indexed read.
+          const found = await query("SELECT 1 AS found FROM polls WHERE id=?", [body.id]);
+          if (!found.rows.length) return response({ error: "部門が見つかりません。" }, 404);
           return invalid("既存の投票数より少ない上限には変更できません。");
         }
-        await query(
-          "UPDATE polls SET title=?,description=?,starts_at=?,ends_at=?,is_published=?,max_votes=? WHERE id=?",
-          [title, description, body.startsAt, body.endsAt, bool(body.isPublished), maxVotes, body.id],
-        );
         return response({ ok: true });
       }
       case "create_candidate": {

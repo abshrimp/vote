@@ -18,6 +18,17 @@ export function validateCondition(node, depth = 0) {
   return false;
 }
 
+
+/** Does an action's eligibility depend on this particular redemption? */
+export function referencesUsedAction(node, actionId) {
+  if (!node || typeof node !== "object") return false;
+  if (node.type === "action_used") return node.actionId === actionId;
+  if (node.type === "all" || node.type === "any") {
+    return Array.isArray(node.rules) && node.rules.some(rule => referencesUsedAction(rule, actionId));
+  }
+  return false;
+}
+
 // A conditional action is checked AT INSERT TIME in one SQLite statement.
 // All identifiers come from fixed SQL templates; user values are bound parameters.
 export function conditionSql(condition, voterHash) {

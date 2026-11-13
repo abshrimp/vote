@@ -387,13 +387,12 @@ export default function FormStudio({ initialData, onLogout }: {
       if (!layoutOnly) {
         await reload();
       } else if (operations.some(op => op.type !== "setting")) {
-        // A page-layout edit does not change polls or candidates. Avoid the
-        // 196-row admin fetch; only reload the seven layout rows and settings.
-        const layoutResponse = await fetch("/api/admin/layout", { cache: "no-store" });
+        // Layout changes need only the page blocks. The theme (including
+        // large logo/OGP data) already reflects successful local edits.
+        const layoutResponse = await fetch("/api/admin/layout?blocksOnly=1", { cache: "no-store" });
         const layout = await layoutResponse.json();
         if (!layoutResponse.ok) throw Error(layout.error || "フォーム構成を取得できません。");
         setBlocks(layout.blocks ?? []);
-        setTheme(layout.settings ?? {});
         setPending({});
         setLayoutDirty(false);
       } else {

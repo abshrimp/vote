@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookieName, getClientIp, hmac, readSession, requireSecret } from "@/lib/voting/security.mjs";
 import { query, readBatch } from "@/lib/voting/turso.mjs";
 import { validId } from "@/lib/voting/logic.mjs";
-import { claimStatement } from "@/lib/voting/conditions.mjs";
+import { claimStatement, referencesUsedAction } from "@/lib/voting/conditions.mjs";
 import { visitorActions } from "@/lib/voting/visitor-actions.mjs";
 import { verifyTurnstile } from "@/lib/voting/turnstile.mjs";
 import { publicActions } from "@/lib/voting/public-snapshot.mjs";
+import { checkVoteRate } from "@/lib/voting/vote-rate.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,14 +76,12 @@ export async function POST(request: NextRequest) {
     return json({ error: "認証サービスを利用できません。" }, 503);
   }
   try {
-    // Shared browser-session rate limit with voting.
-    const bucket = Math.floor(Date.now() / 300000);
-    const attempts = await query(
-      "INSERT INTO vote_request_limits(voter_hash,bucket,attempts) VALUES(?,?,1) " +
-      "ON CONFLICT(voter_hash,bucket) DO UPDATE SET attempts=attempts+1 RETURNING attempts",
-      [hash, bucket],
-    );
-    if (Number(attempts.rows[0]?.attempts ?? 0) > 12) {
+    // Reuse the same atomic, saturating session counter as ordinary voting.
+    // Claim attempts do not have a separate network/browser limit.
+    const rate = await checkVoteRate({
+      secret: requireSecret(), voterHash: hash, ipHash: null, fingerprintHash: null,
+    });
+    if (!rate.allowed) {
       return json({ error: "操作が多すぎます。時間をおいてください。" }, 429);
     }
     const definitions = await publicActions();
@@ -92,7 +91,8 @@ export async function POST(request: NextRequest) {
     if (!action) return json({ error: "機能が見つかりません。" }, 404);
     // The INSERT compares the cached condition_json with the current DB value;
     // changed rules fail closed instead of allowing a stale redemption.
-    const statement = claimStatement(action, hash, new Date().toISOString());
+    const redeemedAt = new Date().toISOString();
+    const statement = claimStatement(action, hash, redeemedAt);
     const inserted = await query(statement.sql, statement.args);
     if (inserted.rowsAffected !== 1) {
       const prior = await query(
@@ -105,7 +105,17 @@ export async function POST(request: NextRequest) {
           : "利用条件を満たしていないか、受付期間外です。",
       }, 409);
     }
-    return json({ ok: true });
+    // For independent actions the client can mark this card as used without
+    // fetching the full voter history a second time. A dependent action still
+    // needs server-side eligibility evaluation against up-to-date voter facts.
+    const refreshRequired = definitions.some((row: Record<string, unknown>) => {
+      try {
+        return referencesUsedAction(JSON.parse(String(row.condition_json)), String(data.actionId));
+      } catch {
+        return true; // Invalid definitions must never suppress a state refresh.
+      }
+    });
+    return json({ ok: true, redeemedAt, refreshRequired });
   } catch {
     return json({ error: "操作に失敗しました。" }, 503);
   }

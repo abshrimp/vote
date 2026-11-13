@@ -25,17 +25,27 @@ export async function checkVoteRate({ secret, voterHash, ipHash, fingerprintHash
   // One SQL statement (and one network request) for all current limits.
   // SQLite serializes the upsert, preserving concurrency protection.
   const placeholders = keys.map(() => "(?,?,1)").join(",");
-  const args = keys.flatMap(({ key }) => [key, bucket]);
+  // Stop writing an exhausted counter. SQLite still evaluates each upsert
+  // atomically, so concurrent requests cannot slip through. A missing
+  // RETURNING row means the counter was at its limit and this request must
+  // be rejected, not retried or accepted.
+  const capCases = keys.map(() => "WHEN ? THEN ?").join(" ");
+  const args = [
+    ...keys.flatMap(({ key }) => [key, bucket]),
+    ...keys.flatMap(({ key, max }) => [key, max]),
+  ];
   const result = await dbQuery(
     "INSERT INTO vote_request_limits(voter_hash,bucket,attempts) VALUES " + placeholders + " " +
     "ON CONFLICT(voter_hash,bucket) DO UPDATE SET attempts=attempts+1 " +
+    "WHERE attempts < CASE voter_hash " + capCases + " ELSE 0 END " +
     "RETURNING voter_hash, attempts",
     args,
   );
   const attempts = new Map(result.rows.map(row => [row.voter_hash, Number(row.attempts)]));
-  if (attempts.size !== keys.length) throw new Error("Incomplete vote rate limit response");
   for (const { key, max, scope } of keys) {
-    if ((attempts.get(key) ?? Infinity) > max) return { allowed: false, scope };
+    if (!attempts.has(key) || (attempts.get(key) ?? Infinity) > max) {
+      return { allowed: false, scope };
+    }
   }
   return { allowed: true };
 }

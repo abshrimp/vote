@@ -23,9 +23,14 @@ test("atomic pre-Turnstile limits stop repeated requests even after rotating coo
     requests++;
     assert.match(sql, /ON CONFLICT/);
     const rows = [];
-    for (let i = 0; i < args.length; i += 2) {
+    const count = (args.length / 2);
+    assert.match(sql, /WHERE attempts < CASE voter_hash/);
+    for (let i = 0; i < count; i += 2) {
       const key = args[i] + ":" + args[i + 1];
-      const attempts = (counts.get(key) || 0) + 1;
+      const cap = args[count + i + 1];
+      const previous = counts.get(key) || 0;
+      if (previous >= cap) continue; // A saturated upsert returns no row.
+      const attempts = previous + 1;
       counts.set(key, attempts);
       rows.push({ voter_hash: args[i], attempts });
     }
@@ -55,4 +60,49 @@ test("expired rate buckets can be pruned using a range on the primary key", asyn
   assert.equal(removed, 5);
   assert.equal(command.sql, "DELETE FROM vote_request_limits WHERE bucket<?");
   assert.deepEqual(command.args, [8]);
+});
+
+test("rate-limit counters stop writing after saturation without relaxing block decisions", async t => {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = await import("node:sqlite")); }
+  catch { t.skip("node:sqlite is unavailable"); return; }
+  const db = new DatabaseSync(":memory:");
+  t.after(() => db.close());
+  db.exec("CREATE TABLE vote_request_limits(bucket INTEGER NOT NULL, voter_hash TEXT NOT NULL, " +
+    "attempts INTEGER NOT NULL CHECK(attempts>=1), PRIMARY KEY(bucket,voter_hash)) WITHOUT ROWID");
+  let writes = 0;
+  const dbQuery = async (sql, args) => {
+    const result = db.prepare(sql).all(...args);
+    writes += result.length;
+    return { rows: result };
+  };
+  for (let n = 0; n < 12; n++) {
+    assert.deepEqual(await checkVoteRate({ ...input, now: 0, dbQuery }), { allowed: true });
+  }
+  assert.equal(writes, 24);
+  assert.deepEqual(await checkVoteRate({ ...input, now: 0, dbQuery }),
+    { allowed: false, scope: "session" });
+  assert.equal(writes, 25); // Signal continues to count attempted abuse.
+  for (let n = 0; n < 27; n++) {
+    await checkVoteRate({ ...input, now: 0, dbQuery });
+  }
+  assert.equal(writes, 52); // Session 12 + signal 40; both counters saturated.
+  for (let n = 0; n < 100; n++) {
+    assert.deepEqual(await checkVoteRate({ ...input, now: 0, dbQuery }),
+      { allowed: false, scope: "session" });
+  }
+  assert.equal(writes, 52); // Further abusive attempts cause zero writes.
+  assert.equal(db.prepare("SELECT attempts FROM vote_request_limits WHERE voter_hash=?")
+    .get(input.voterHash).attempts, 12);
+  const rotated = await checkVoteRate({ ...input, voterHash: "other-session", now: 0, dbQuery });
+  assert.deepEqual(rotated, { allowed: false, scope: "network-browser" });
+  assert.equal(writes, 53); // The new session is recorded; the shared signal remains blocked.
+  assert.deepEqual(await checkVoteRate({ ...input, now: 300000, dbQuery }), { allowed: true });
+});
+
+test("a missing RETURNING row is rejected even when only one rate key exists", async () => {
+  const oneKey = { ...input, ipHash: null, fingerprintHash: null };
+  const dbQuery = async () => ({ rows: [] });
+  assert.deepEqual(await checkVoteRate({ ...oneKey, dbQuery }),
+    { allowed: false, scope: "session" });
 });
