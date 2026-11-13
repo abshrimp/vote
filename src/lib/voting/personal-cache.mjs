@@ -1,6 +1,6 @@
 // A short-lived, browser-only optimization. The signed HttpOnly session
 // remains authoritative for all votes, redemptions and anti-abuse checks.
-export const PERSONAL_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+export const PERSONAL_CACHE_MAX_AGE_MS = 60 * 60 * 1000;
 const STORAGE_KEY = "festival-vote-personal-v1";
 
 function validPersonal(personal) {
