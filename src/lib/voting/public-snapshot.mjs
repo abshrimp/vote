@@ -18,6 +18,16 @@ export function createTtlCache(loader, ttlMs = 30_000, now = Date.now) {
   };
 }
 
+export const PUBLIC_SETTINGS_SQL = "SELECT key,value FROM form_settings WHERE key IN (" +
+  "'themeColor','accentColor','highlightColor','textColor','backgroundColor'," +
+  "'logo','headingFont','bodyFont','organizerName','officialUrl','contactEmail')";
+
+export const SITE_METADATA_SQL =
+  "SELECT COALESCE((SELECT title FROM page_blocks WHERE kind='heading' " +
+    "AND is_published=1 AND title<>'' ORDER BY sort_order,id LIMIT 1),'投票フォーム') AS title," +
+    "EXISTS(SELECT 1 FROM form_settings WHERE key='favicon' AND value<>'') AS favicon," +
+    "EXISTS(SELECT 1 FROM form_settings WHERE key='ogp' AND value<>'') AS ogp";
+
 /** Public page structure only: no votes, claim state, or 120 KB OGP payload. */
 async function loadPublicSnapshot() {
   const now = new Date().toISOString();
@@ -37,9 +47,7 @@ async function loadPublicSnapshot() {
         "is_published FROM page_blocks ORDER BY sort_order,id",
     },
     // Favicon and OGP are served independently; never load them for page JSON.
-    { sql: "SELECT key,value FROM form_settings WHERE key IN (" +
-      "'themeColor','accentColor','highlightColor','textColor','backgroundColor'," +
-      "'logo','headingFont','bodyFont','organizerName','officialUrl','contactEmail')" },
+    { sql: PUBLIC_SETTINGS_SQL },
   ]);
   return { pollRows: polls.rows, blocks: layout.rows, settings: cleanSettings(settings.rows) };
 }
@@ -58,12 +66,7 @@ export const publicActions = createTtlCache(async () => {
 
 /** Server metadata must not read the full 196-candidate public snapshot. */
 export const siteMetadata = createTtlCache(async () => {
-  const result = await query(
-    "SELECT COALESCE((SELECT title FROM page_blocks WHERE kind='heading' " +
-      "AND is_published=1 AND title<>'' ORDER BY sort_order,id LIMIT 1),'投票フォーム') AS title," +
-      "EXISTS(SELECT 1 FROM form_settings WHERE key='favicon' AND value<>'') AS favicon," +
-      "EXISTS(SELECT 1 FROM form_settings WHERE key='ogp' AND value<>'') AS ogp",
-  );
+  const result = await query(SITE_METADATA_SQL);
   return result.rows[0] ?? { title: "投票フォーム", favicon: 0, ogp: 0 };
 });
 
