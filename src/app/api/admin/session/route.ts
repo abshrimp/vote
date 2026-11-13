@@ -6,9 +6,10 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const authenticated = await isAdmin(request);
   return NextResponse.json({
-    authenticated: isAdmin(request),
-    email: adminSession(request)?.email ?? null,
+    authenticated,
+    email: authenticated ? adminSession(request)?.email ?? null : null,
   }, { headers: { "Cache-Control": "private, no-store", "Vary": "Cookie" } });
 }
 export async function POST(request: NextRequest) {
