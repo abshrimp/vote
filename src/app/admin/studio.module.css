@@ -272,7 +272,15 @@
   overflow: visible; /* The rich text style toolbar and its badges must not be clipped. */
 }
 .purpleLine { border-radius: 8px 8px 0 0; }
-.draggingCard { opacity: .45; }
+.draggingCard { opacity: .08; }
+.sortingCanvas > .questionCard,
+.sortingCanvas > .activeCard {
+  transition: transform .2s cubic-bezier(.2, 0, 0, 1), box-shadow .15s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sortingCanvas > .questionCard,
+  .sortingCanvas > .activeCard { transition: none; }
+}
 .dragHandle { cursor: grab; user-select: none; touch-action: none; }
 .dragHandle:active { cursor: grabbing; }
 .purpleLine {
