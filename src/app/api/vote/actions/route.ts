@@ -6,6 +6,7 @@ import { claimStatement, referencesUsedAction } from "@/lib/voting/conditions.mj
 import { visitorActions } from "@/lib/voting/visitor-actions.mjs";
 import { verifyTurnstile } from "@/lib/voting/turnstile.mjs";
 import { publicActions } from "@/lib/voting/public-snapshot.mjs";
+import { checkVoteRate } from "@/lib/voting/vote-rate.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,17 +76,12 @@ export async function POST(request: NextRequest) {
     return json({ error: "認証サービスを利用できません。" }, 503);
   }
   try {
-    // Shared browser-session rate limit with voting.
-    const bucket = Math.floor(Date.now() / 300000);
-    const attempts = await query(
-      "INSERT INTO vote_request_limits(voter_hash,bucket,attempts) VALUES(?,?,1) " +
-      "ON CONFLICT(voter_hash,bucket) DO UPDATE SET attempts=attempts+1 " +
-      "WHERE attempts<12 RETURNING attempts",
-      [hash, bucket],
-    );
-    // No RETURNING row means the counter is already at the limit. Subsequent
-    // attempts remain blocked without writing to Turso.
-    if (!attempts.rows.length || Number(attempts.rows[0]?.attempts) > 12) {
+    // Reuse the same atomic, saturating session counter as ordinary voting.
+    // Claim attempts do not have a separate network/browser limit.
+    const rate = await checkVoteRate({
+      secret: requireSecret(), voterHash: hash, ipHash: null, fingerprintHash: null,
+    });
+    if (!rate.allowed) {
       return json({ error: "操作が多すぎます。時間をおいてください。" }, 429);
     }
     const definitions = await publicActions();
