@@ -7,6 +7,7 @@ import Mark from "../Mark";
 import CandidateSheet from "./CandidateSheet";
 import PreviewPane from "./PreviewPane";
 import RichTextEditor from "./RichTextEditor";
+import { useEditorHistory } from "./useEditorHistory";
 import { parseRich, plainText } from "@/lib/voting/richtext.mjs";
 import RichText from "../ui/RichText";
 import AutoTextarea from "../ui/AutoTextarea";
@@ -28,6 +29,8 @@ const icons = {
   delete: "M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zM8 9h8v10H8zm7.5-5-1-1h-5l-1 1H5v2h14V4z",
   close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
   preview: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  undo: "M12.5 8c-4.4 0-8 2.7-9.5 7 2.2-2.2 5-3.5 9.5-3.5 3.7 0 6 1.5 8.5 4.5-.7-4.9-3.6-8-8.5-8zM9 4 2 10l7 6V4z",
+  redo: "M11.5 8c4.4 0 8 2.7 9.5 7-2.2-2.2-5-3.5-9.5-3.5-3.7 0-6 1.5-8.5 4.5.7-4.9 3.6-8 8.5-8zM15 4l7 6-7 6V4z",
   refresh: "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z",
   logout: "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8v-2H4z",
   label: "M17.63 5.84C17.27 5.33 16.67 5 16 5L5 5.01C3.9 5.01 3 5.9 3 7v10c0 1.1.9 1.99 2 1.99L16 19c.67 0 1.27-.33 1.63-.84L22 12zM16 17H5V7h11l3.55 5z",
@@ -149,6 +152,7 @@ export default function FormStudio({ initialData, onLogout }: {
   const [tab, setTab] = useState<"questions" | "responses" | "settings">("questions");
   const [selected, setSelected] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  const dragHandleRef = useRef<string | null>(null);
   const [pollDraft, setPollDraft] = useState<PollDraft | null>(null);
   const [actionDraft, setActionDraft] = useState<ActionDraft | null>(null);
   const [blockTitle, setBlockTitle] = useState("");
@@ -170,6 +174,51 @@ export default function FormStudio({ initialData, onLogout }: {
   const [ready, setReady] = useState(false);
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [historyResetKey, setHistoryResetKey] = useState(0);
+
+  const editorSnapshot = {
+    data, blocks, theme, pending, layoutDirty, selected,
+    pollDraft, actionDraft, blockTitle, blockBody, blockPublished,
+    candidateEdits, publicIdEdits, extraEdits, newColumnName,
+    formTitle, formDescription,
+  };
+  const { undo, redo, canUndo, canRedo } = useEditorHistory(editorSnapshot, state => {
+    setData(state.data);
+    setBlocks(state.blocks);
+    setTheme(state.theme);
+    setPending(state.pending);
+    setLayoutDirty(state.layoutDirty);
+    setSelected(state.selected);
+    setPollDraft(state.pollDraft);
+    setActionDraft(state.actionDraft);
+    setBlockTitle(state.blockTitle);
+    setBlockBody(state.blockBody);
+    setBlockPublished(state.blockPublished);
+    setCandidateEdits(state.candidateEdits);
+    setPublicIdEdits(state.publicIdEdits);
+    setExtraEdits(state.extraEdits);
+    setNewColumnName(state.newColumnName);
+    setFormTitle(state.formTitle);
+    setFormDescription(state.formDescription);
+  }, ready, historyResetKey);
+
+  useEffect(() => {
+    const onHistoryKey = (event: KeyboardEvent) => {
+      if (event.isComposing || !(event.metaKey || event.ctrlKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      const backwards = key === "z" && !event.shiftKey;
+      const forwards = key === "y" || (key === "z" && event.shiftKey);
+      if ((backwards && canUndo) || (forwards && canRedo)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (backwards) undo(); else redo();
+      }
+    };
+    window.addEventListener("keydown", onHistoryKey, true);
+    return () => window.removeEventListener("keydown", onHistoryKey, true);
+  }, [undo, redo, canUndo, canRedo]);
+
 
   const reload = useCallback(async () => {
     const [adminResponse, layoutResponse] = await Promise.all([
@@ -351,6 +400,7 @@ export default function FormStudio({ initialData, onLogout }: {
         setPending({});
         setLayoutDirty(false);
       }
+      setHistoryResetKey(key => key + 1);
       setNotice("変更を保存しました");
     }catch(e){setNotice(e instanceof Error?e.message:"保存できませんでした。");}
     finally{setBusy(false);}
@@ -721,6 +771,7 @@ export default function FormStudio({ initialData, onLogout }: {
       if (!response.ok) throw Error(result.error || "リセットできませんでした。");
       setResetOpen(false); setResetText("");
       await reload();
+      setHistoryResetKey(key => key + 1);
       setNotice("集計をリセットしました");
     } catch (error) { setNotice(error instanceof Error ? error.message : "リセットできませんでした。"); }
     finally { setBusy(false); }
@@ -732,6 +783,10 @@ export default function FormStudio({ initialData, onLogout }: {
         <div><div className={styles.brandName}>{formTitle || "投票フォーム"}</div><span className={unsaved ? `${styles.saved} ${styles.dirty}` : styles.saved}>{unsaved ? "未保存の変更があります" : "すべての変更を保存済み"}</span></div>
       </div>
       <div className={styles.topActions}>
+        <button type="button" className={styles.iconButton} aria-label="元に戻す" data-tip="元に戻す (⌘/Ctrl+Z)"
+          disabled={!canUndo || busy} onClick={undo}><Icon d={icons.undo}/></button>
+        <button type="button" className={styles.iconButton} aria-label="やり直す" data-tip="やり直す (⌘/Ctrl+Shift+Z)"
+          disabled={!canRedo || busy} onClick={redo}><Icon d={icons.redo}/></button>
         <button type="button" className={styles.iconButton} data-tip="プレビュー" aria-label="プレビュー" onClick={() => { stage(); setPreviewOpen(true); }}><Icon d={icons.preview}/></button>
         <button className={styles.iconButton} type="button" data-tip="再読み込み" aria-label="再読み込み" onClick={() => void (async () => {if(Object.keys(pending).length||!await confirm({ title: "再読み込みしますか？", body: "保存していない編集内容は失われます。", confirmLabel: "再読み込み", danger: true }))return;await reload().catch(e => setNotice(String(e)));})()}><Icon d={icons.refresh}/></button>
         <button className={styles.publishButton} type="button" disabled={busy} data-tip="Ctrl+S" onClick={() => void saveAll()}>{busy ? "保存中…" : "保存"}</button>
@@ -767,15 +822,26 @@ export default function FormStudio({ initialData, onLogout }: {
           const poll = item.poll;
           const action = item.action;
           const block = item.block;
-          return <section key={item.id} id={"item-" + item.id} className={active ? styles.activeCard : styles.questionCard}
+          return <section key={item.id} id={"item-" + item.id}
+            className={`${active ? styles.activeCard : styles.questionCard} ${draggedId === item.id ? styles.draggingCard : ""}`}
+            draggable
+            onPointerDownCapture={e => {
+              dragHandleRef.current = (e.target as Element).closest("[data-drag-handle]") ? item.id : null;
+            }}
+            onDragStart={e => {
+              if (dragHandleRef.current !== item.id) { e.preventDefault(); return; }
+              e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("text/plain", item.id);
+              setDraggedId(item.id);
+            }}
+            onDragEnd={() => { setDraggedId(null); dragHandleRef.current = null; }}
             onDragOver={e => { if (draggedId && draggedId !== item.id) e.preventDefault(); }}
             onDrop={e => { e.preventDefault(); dropSection(item); setDraggedId(null); }}
             onClick={() => { if (!active) select(item); }}>
             {active && <div className={styles.selectionAccent}/>}
             <div className={styles.cardHead}>
-              <span className={styles.dragHandle} draggable aria-label="ドラッグして並び替え" role="button" tabIndex={0}
-                onDragStart={e => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", item.id); setDraggedId(item.id); }}
-                onDragEnd={() => setDraggedId(null)}><Icon d={icons.drag}/></span>
+              <span className={styles.dragHandle} data-drag-handle aria-label="ドラッグして並び替え">
+                <Icon d={icons.drag}/></span>
               <span className={styles.cardKind}>{item.kind === "poll" ? "投票部門" : item.kind === "action" ? "条件付きアクション" : item.kind === "heading" ? "見出し" : "説明文"}</span>
             </div>
             {poll && (active && pollDraft ? <>
