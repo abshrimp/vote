@@ -88,15 +88,16 @@
 
 @media (max-width: 520px) {
   .dialogLarge {
-    width: 100vw;
-    max-width: 100vw;
-    max-height: 92dvh;
-    margin: auto 0 0;
-    border-radius: 28px 28px 0 0;
+    width: calc(100% - 32px);
+    max-width: 640px;
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    margin: auto;
+    border-radius: 20px;
   }
-  .dialogLarge[open] { animation: sheetIn .25s cubic-bezier(.2, 0, 0, 1); }
-  .dialogLarge .dialogInner { max-height: 92dvh; padding-bottom: max(24px, env(safe-area-inset-bottom)); }
-  @keyframes sheetIn { from { transform: translateY(40%); opacity: 0; } }
+  .dialogLarge .dialogInner {
+    max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding: 20px;
+  }
 }
 
 /* ───────── Snackbar ───────── */
