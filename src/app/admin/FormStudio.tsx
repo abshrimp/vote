@@ -243,10 +243,15 @@ export default function FormStudio({ initialData, onLogout }: {
         isPublished:pollDraft.isPublished };
       if (pollDraft.publicId !== (p.publicId??""))
         ops["public_id:poll:" + p.id] = { type:"public_id",pollId:p.id,candidateId:null,publicId:pollDraft.publicId || null };
+      // Changing a column's label, font or order only updates polls.columns_json.
+      // Candidate rows need rewriting solely if their values actually changed,
+      // or if a removed column left data to discard.
+      const visibleKeys = new Set(pollDraft.columns.map(column => column.key));
+      const removedKeys = p.columns.map(column => column.key).filter(key => !visibleKeys.has(key));
       for (const candidate of p.candidates) {
         if (candidateEdits[candidate.id] !== candidate.name ||
             JSON.stringify(extraEdits[candidate.id] ?? {}) !== JSON.stringify(candidate.extra ?? {}) ||
-            JSON.stringify(pollDraft.columns) !== JSON.stringify(p.columns))
+            removedKeys.some(key => Object.hasOwn(candidate.extra ?? {}, key)))
           ops["candidate:" + candidate.id] = { type:"candidate",pollId:p.id,id:candidate.id,
             name:candidateEdits[candidate.id] ?? candidate.name,extra:Object.fromEntries(Object.entries(extraEdits[candidate.id] ?? {}).filter(([key])=>pollDraft.columns.some(c=>c.key===key))),columns:pollDraft.columns };
         if (publicIdEdits[candidate.id] !== undefined && publicIdEdits[candidate.id] !== (candidate.publicId??""))
