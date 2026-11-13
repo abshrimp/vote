@@ -3,7 +3,7 @@ import { FONTS, fontStylesheet } from "@/lib/voting/fonts.mjs";
 
 export type ThemeSettings = {
   themeColor?: string; accentColor?: string; highlightColor?: string;
-  textColor?: string; backgroundColor?: string; logo?: string;
+  textColor?: string; backgroundColor?: string; logo?: string; favicon?: string; ogp?: string;
   headingFont?: string; bodyFont?: string;
   organizerName?: string; officialUrl?: string; contactEmail?: string;
 };
@@ -12,7 +12,7 @@ const BASE_STACK = '"Google Sans Text", "Google Sans", Roboto, "Noto Sans JP", -
 export const fontOptions = Object.entries(FONTS).map(([value, font]) => ({ value, label: font.label }));
 /** CSS font-family for a font key (falls back to the default stack). */
 export function fontFamily(key: string | undefined) {
-  const family = key ? (FONTS as Record<string, { family: string | null }>)[key]?.family : null;
+  const family = key?.startsWith("google:") ? JSON.stringify(key.slice(7)) : key ? (FONTS as Record<string, { family: string | null }>)[key]?.family : null;
   return family ? family + ", " + BASE_STACK : BASE_STACK;
 }
 

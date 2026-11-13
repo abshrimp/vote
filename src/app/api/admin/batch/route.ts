@@ -4,6 +4,7 @@ import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
 import { SETTING_RULES } from "@/lib/voting/settings.mjs";
+import { customGoogleFont, verifyGoogleFont } from "@/lib/voting/fonts.mjs";
 import { validateBlock } from "@/lib/voting/layout.mjs";
 import { readBatch, transaction } from "@/lib/voting/turso.mjs";
 import { sanitizeRich } from "@/lib/voting/richtext.mjs";
@@ -215,6 +216,12 @@ export async function POST(request: NextRequest) {
   try { steps = prepare(operations); }
   catch (e) { return fail(e instanceof Error ? e.message : "入力が正しくありません。"); }
   if (!steps.length) return NextResponse.json({ ok: true, saved: 0 });
+  for (const value of new Set(operations.filter(op => op.type === "setting" &&
+    (op.key === "headingFont" || op.key === "bodyFont")).map(op => op.value))) {
+    if (customGoogleFont(value) && !(await verifyGoogleFont(value))) {
+      return fail("Google Fonts に存在するフォント名を入力してください。");
+    }
+  }
   if (operations.some(op => op.type === "public_id")) {
     // IDs may be comma-separated lists, so the rules are checked here rather than by SQL.
     try {

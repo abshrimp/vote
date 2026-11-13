@@ -22,7 +22,9 @@ const contactEmail = value => typeof value === "string" &&
 /** Settings an administrator may change, with their validators. An empty logo means the default mark. */
 export const SETTING_RULES = {
   themeColor: color, accentColor: color, highlightColor: color, textColor: color, backgroundColor: color,
-  logo, headingFont: validFont, bodyFont: validFont,
+  logo, favicon: value => value === "" || (typeof value === "string" && value.length < 120000 && /^data:image\/x-icon;base64,[A-Za-z0-9+/]+=*$/.test(value)),
+  ogp: value => value === "" || (typeof value === "string" && value.length < 450000 && /^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(value)),
+  headingFont: validFont, bodyFont: validFont,
   organizerName, officialUrl, contactEmail,
 };
 
@@ -30,7 +32,7 @@ export function cleanSettings(rows) {
   const out = {};
   for (const { key, value } of rows ?? []) {
     if (!Object.hasOwn(SETTING_RULES, key) || !SETTING_RULES[key](value) || value === "") continue;
-    out[key] = key === "logo" || key.endsWith("Font") || key === "organizerName" || key === "officialUrl" || key === "contactEmail"
+    out[key] = ["logo", "favicon", "ogp"].includes(key) || key.endsWith("Font") || key === "organizerName" || key === "officialUrl" || key === "contactEmail"
       ? value : value.toLowerCase();
   }
   return out;
