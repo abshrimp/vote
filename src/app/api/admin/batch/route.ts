@@ -162,13 +162,19 @@ function prepare(operations: Operation[]) {
       default: throw Error("対応していない変更が含まれます。");
     }
   }
-  // Release existing public IDs before assigning new ones, allowing a swap
-  // between two entities in one atomic save without temporary conflicts.
-  for (const update of publicIdUpdates) {
-    steps.push({ sql: update.sql, args: [null, ...update.args.slice(1)] });
-  }
-  for (const update of publicIdUpdates) {
-    if (update.args[0] !== null) steps.push(update);
+  if (publicIdUpdates.length === 1) {
+    // The common case is one edited public ID: a direct UPDATE writes one row,
+    // not an unnecessary clear followed by a second write.
+    steps.push(publicIdUpdates[0]);
+  } else {
+    // Multiple IDs may be swapped in one save. Release conflicting old
+    // identifiers before assigning new ones, within the same transaction.
+    for (const update of publicIdUpdates) {
+      steps.push({ sql: update.sql, args: [null, ...update.args.slice(1)] });
+    }
+    for (const update of publicIdUpdates) {
+      if (update.args[0] !== null) steps.push(update);
+    }
   }
   // Positions are applied last, after every new block exists.
   steps.push(...layoutOrder);
