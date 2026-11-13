@@ -3,6 +3,7 @@ import { isAdmin, sameOrigin, cleanText, validRange, validateAction, actionConfi
 import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
+import { publicIdCheckPlan, projectPublicIds } from "@/lib/voting/public-id-check.mjs";
 import { SETTING_RULES } from "@/lib/voting/settings.mjs";
 import { customGoogleFont, verifyGoogleFont } from "@/lib/voting/fonts.mjs";
 import { validateBlock } from "@/lib/voting/layout.mjs";
@@ -177,17 +178,22 @@ function prepare(operations: Operation[]) {
     }
   }
   if (publicIdUpdates.length === 1) {
-    // The common case is one edited public ID: a direct UPDATE writes one row,
-    // not an unnecessary clear followed by a second write.
-    steps.push(publicIdUpdates[0]);
+    // An unchanged ID is a zero-row update, including repeated clears.
+    const update = publicIdUpdates[0];
+    steps.push({ sql: update.sql + " AND public_id IS NOT ?",
+      args: [...update.args, update.args[0]] });
   } else {
-    // Multiple IDs may be swapped in one save. Release conflicting old
-    // identifiers before assigning new ones, within the same transaction.
+    // Multi-entity swaps require releasing old aliases first. Skip an
+    // already-null row and avoid a redundant second write for clear requests.
     for (const update of publicIdUpdates) {
-      steps.push({ sql: update.sql, args: [null, ...update.args.slice(1)] });
+      steps.push({ sql: update.sql + " AND public_id IS NOT NULL",
+        args: [null, ...update.args.slice(1)] });
     }
     for (const update of publicIdUpdates) {
-      if (update.args[0] !== null) steps.push(update);
+      if (update.args[0] !== null) {
+        steps.push({ sql: update.sql + " AND public_id IS NOT ?",
+          args: [...update.args, update.args[0]] });
+      }
     }
   }
   // Positions are applied last, after every new block exists.
@@ -196,26 +202,18 @@ function prepare(operations: Operation[]) {
 }
 
 async function publicIdConflict(operations: Operation[]) {
-  const [pollRows, candidateRows] = await readBatch([
+  const plan = publicIdCheckPlan(operations);
+  if (plan?.skip) return null;
+  const [pollRows, candidateRows] = await readBatch(plan?.statements ?? [
     { sql: "SELECT id,public_id FROM polls" },
     { sql: "SELECT poll_id,id,public_id FROM candidates" },
   ]);
-  let polls = pollRows.rows as { id: string; public_id: string | null }[];
-  let candidates = candidateRows.rows as { poll_id: string; id: string; public_id: string | null }[];
-  for (const op of operations) {
-    if (op.type === "poll_new") polls.push({ id: op.id as string, public_id: null });
-    if (op.type === "candidate_new") candidates.push({ poll_id: op.pollId as string, id: op.id as string, public_id: null });
-    if (op.type === "poll_delete") {
-      polls = polls.filter(p => p.id !== op.id);
-      candidates = candidates.filter(c => c.poll_id !== op.id);
-    }
-    if (op.type === "public_id") {
-      const value = normalizePublicIds(op.publicId) ?? null;
-      if (op.candidateId === null) polls = polls.map(p => p.id === op.pollId ? { ...p, public_id: value } : p);
-      else candidates = candidates.map(c => c.poll_id === op.pollId && c.id === op.candidateId ? { ...c, public_id: value } : c);
-    }
-  }
-  return findPublicIdConflict(polls, candidates);
+  const projected = projectPublicIds(
+    pollRows.rows as { id: string; public_id: string | null }[],
+    candidateRows.rows as { poll_id: string; id: string; public_id: string | null }[],
+    operations,
+  );
+  return findPublicIdConflict(projected.polls, projected.candidates);
 }
 
 export async function POST(request: NextRequest) {
