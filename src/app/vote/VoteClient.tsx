@@ -133,7 +133,9 @@ export default function VoteClient() {
             return response.json() as Promise<PersonalState>;
           })(),
         ]);
-        rememberPersonal(personal);
+        // Reusing a snapshot must not extend its TTL indefinitely.
+        if (cached) personalState.current = personal;
+        else rememberPersonal(personal);
         if (mounted) {
           setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
           setActions(personal.actions ?? []);
@@ -319,6 +321,7 @@ export default function VoteClient() {
         try {
           if (data.code === "ALREADY_VOTED") await refresh(true);
           else if (data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
+          else discardPersonalCache();
           notify(message);
         } catch {
           discardPersonalCache();
