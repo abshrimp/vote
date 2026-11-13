@@ -3,6 +3,7 @@ import { isAdmin, sameOrigin, cleanText, validRange, validateAction, actionConfi
 import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
+import { publicIdCheckPlan } from "@/lib/voting/public-id-check.mjs";
 import { SETTING_RULES } from "@/lib/voting/settings.mjs";
 import { customGoogleFont, verifyGoogleFont } from "@/lib/voting/fonts.mjs";
 import { validateBlock } from "@/lib/voting/layout.mjs";
@@ -196,7 +197,9 @@ function prepare(operations: Operation[]) {
 }
 
 async function publicIdConflict(operations: Operation[]) {
-  const [pollRows, candidateRows] = await readBatch([
+  const plan = publicIdCheckPlan(operations);
+  if (plan?.skip) return null;
+  const [pollRows, candidateRows] = await readBatch(plan?.statements ?? [
     { sql: "SELECT id,public_id FROM polls" },
     { sql: "SELECT poll_id,id,public_id FROM candidates" },
   ]);
