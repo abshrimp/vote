@@ -11,6 +11,7 @@ import PrivacyPolicy from "./PrivacyPolicy";
 import RichText from "../ui/RichText";
 import { themeVars, useWebFonts, type ThemeSettings } from "../ui/theme";
 import VoteBoard, { type Poll, type Action, type LayoutBlock } from "./VoteBoard";
+import BackToTop from "./BackToTop";
 
 type Turnstile = {
   render: (element: HTMLElement, options: {
@@ -365,6 +366,7 @@ export default function VoteClient() {
           </section>
         )}
       </div>
+      <BackToTop />
       <footer className={styles.footer}>
         {settings.organizerName && <span>© {settings.organizerName}</span>}
         <button type="button" className={styles.footerLink} onClick={() => setPolicyOpen(true)}>
