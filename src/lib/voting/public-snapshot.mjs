@@ -18,6 +18,13 @@ export function createTtlCache(loader, ttlMs = 30_000, now = Date.now) {
   };
 }
 
+export const PUBLIC_POLLS_SQL =
+  "SELECT p.id AS poll_id,p.public_id AS poll_public_id,p.title,p.description,p.max_votes,p.name_font_size,p.columns_json," +
+  "c.id AS candidate_id,c.public_id AS candidate_public_id,c.name AS candidate_name,c.extra_json AS candidate_extra_json " +
+  "FROM polls p LEFT JOIN candidates c ON c.poll_id=p.id " +
+  "WHERE p.is_published=1 AND p.starts_at<=? AND p.ends_at>? " +
+  "ORDER BY p.id,c.sort_order,c.id";
+
 export const PUBLIC_SETTINGS_SQL = "SELECT key,value FROM form_settings WHERE key IN (" +
   "'themeColor','accentColor','highlightColor','textColor','backgroundColor'," +
   "'logo','headingFont','bodyFont','organizerName','officialUrl','contactEmail')";
@@ -32,14 +39,7 @@ export const SITE_METADATA_SQL =
 async function loadPublicSnapshot() {
   const now = new Date().toISOString();
   const [polls, layout, settings] = await readBatch([
-    {
-      sql: "SELECT p.id AS poll_id,p.public_id AS poll_public_id,p.title,p.description,p.max_votes,p.name_font_size,p.columns_json," +
-        "c.id AS candidate_id,c.public_id AS candidate_public_id,c.name AS candidate_name,c.extra_json AS candidate_extra_json " +
-        "FROM polls p LEFT JOIN candidates c ON c.poll_id=p.id " +
-        "WHERE p.is_published=1 AND p.starts_at<=? AND p.ends_at>? " +
-        "ORDER BY p.id,c.sort_order,c.id",
-      args: [now, now],
-    },
+    { sql: PUBLIC_POLLS_SQL, args: [now, now] },
     {
       sql: "SELECT id,kind,reference_id," +
         "CASE WHEN is_published=1 THEN title ELSE '' END AS title," +
