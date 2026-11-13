@@ -5,7 +5,7 @@ import { validId } from "@/lib/voting/logic.mjs";
 import { claimStatement } from "@/lib/voting/conditions.mjs";
 import { visitorActions } from "@/lib/voting/visitor-actions.mjs";
 import { verifyTurnstile } from "@/lib/voting/turnstile.mjs";
-import { publicSnapshot } from "@/lib/voting/public-snapshot.mjs";
+import { publicActions } from "@/lib/voting/public-snapshot.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,15 +26,15 @@ export async function GET(request: NextRequest) {
     if (!hash) return json({ error: "セッションがありません。" }, 403);
     // Public action definitions are cached for 30 seconds; visitor state is never cached.
     // The sensitive per-visitor facts never enter a shared cache.
-    const [snapshot, personal] = await Promise.all([
-      publicSnapshot(),
+    const [definitions, personal] = await Promise.all([
+      publicActions(),
       readBatch([
         { sql: "SELECT poll_id FROM votes WHERE voter_hash=?", args: [hash] },
         { sql: "SELECT action_id,redeemed_at FROM action_claims WHERE voter_hash=?", args: [hash] },
       ]),
     ]);
     const [votes, claims] = personal;
-    const actions = visitorActions(snapshot.activeActions, votes.rows, claims.rows);
+    const actions = visitorActions(definitions, votes.rows, claims.rows);
     return json({ actions });
   } catch {
     return json({ error: "追加機能を取得できませんでした。" }, 503);
@@ -85,8 +85,8 @@ export async function POST(request: NextRequest) {
     if (Number(attempts.rows[0]?.attempts ?? 0) > 12) {
       return json({ error: "操作が多すぎます。時間をおいてください。" }, 429);
     }
-    const snapshot = await publicSnapshot();
-    const action = snapshot.activeActions.find(
+    const definitions = await publicActions();
+    const action = definitions.find(
       (row: Record<string, unknown>) => row.id === data.actionId && row.kind === "claim",
     );
     if (!action) return json({ error: "機能が見つかりません。" }, 404);

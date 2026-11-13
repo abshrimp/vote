@@ -243,10 +243,15 @@ export default function FormStudio({ initialData, onLogout }: {
         isPublished:pollDraft.isPublished };
       if (pollDraft.publicId !== (p.publicId??""))
         ops["public_id:poll:" + p.id] = { type:"public_id",pollId:p.id,candidateId:null,publicId:pollDraft.publicId || null };
+      // Changing a column's label, font or order only updates polls.columns_json.
+      // Candidate rows need rewriting solely if their values actually changed,
+      // or if a removed column left data to discard.
+      const visibleKeys = new Set(pollDraft.columns.map(column => column.key));
+      const removedKeys = p.columns.map(column => column.key).filter(key => !visibleKeys.has(key));
       for (const candidate of p.candidates) {
         if (candidateEdits[candidate.id] !== candidate.name ||
             JSON.stringify(extraEdits[candidate.id] ?? {}) !== JSON.stringify(candidate.extra ?? {}) ||
-            JSON.stringify(pollDraft.columns) !== JSON.stringify(p.columns))
+            removedKeys.some(key => Object.hasOwn(candidate.extra ?? {}, key)))
           ops["candidate:" + candidate.id] = { type:"candidate",pollId:p.id,id:candidate.id,
             name:candidateEdits[candidate.id] ?? candidate.name,extra:Object.fromEntries(Object.entries(extraEdits[candidate.id] ?? {}).filter(([key])=>pollDraft.columns.some(c=>c.key===key))),columns:pollDraft.columns };
         if (publicIdEdits[candidate.id] !== undefined && publicIdEdits[candidate.id] !== (candidate.publicId??""))
@@ -326,7 +331,26 @@ export default function FormStudio({ initialData, onLogout }: {
       const result=await response.json();
       if(!response.ok)throw Error(result.error||"保存できませんでした。");
       setSelected(null);setPollDraft(null);setActionDraft(null);
-      await reload();
+      const layoutOnly = operations.every(op =>
+        ["setting", "block", "block_new", "block_delete", "layout_order"].includes(op.type));
+      if (!layoutOnly) {
+        await reload();
+      } else if (operations.some(op => op.type !== "setting")) {
+        // A page-layout edit does not change polls or candidates. Avoid the
+        // 196-row admin fetch; only reload the seven layout rows and settings.
+        const layoutResponse = await fetch("/api/admin/layout", { cache: "no-store" });
+        const layout = await layoutResponse.json();
+        if (!layoutResponse.ok) throw Error(layout.error || "フォーム構成を取得できません。");
+        setBlocks(layout.blocks ?? []);
+        setTheme(layout.settings ?? {});
+        setPending({});
+        setLayoutDirty(false);
+      } else {
+        // Settings are already reflected in local state, and the transaction
+        // succeeded: no Turso SELECT is needed just to confirm their values.
+        setPending({});
+        setLayoutDirty(false);
+      }
       setNotice("変更を保存しました");
     }catch(e){setNotice(e instanceof Error?e.message:"保存できませんでした。");}
     finally{setBusy(false);}

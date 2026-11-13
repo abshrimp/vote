@@ -72,3 +72,23 @@ export function groupPolls(rows, selections = []) {
       poll.selectedIds.length >= Math.min(poll.maxVotes, poll.candidates.length),
   }));
 }
+
+/** Apply only private voter rows to already cached public polls. */
+export function applySelections(polls, selections = []) {
+  const official = new Map();
+  const conditional = new Map();
+  for (const selection of selections) {
+    const byPoll = Number(selection.is_official) === 1 ? official : conditional;
+    if (!byPoll.has(selection.poll_id)) byPoll.set(selection.poll_id, new Set());
+    byPoll.get(selection.poll_id).add(selection.candidate_id);
+  }
+  return polls.map(poll => {
+    const selectedIds = [...(official.get(poll.id) ?? [])];
+    const conditionIds = [...(conditional.get(poll.id) ?? [])];
+    return {
+      ...poll, selectedIds, conditionIds,
+      voted: conditionIds.length > 0 ||
+        selectedIds.length >= Math.min(poll.maxVotes, poll.candidates.length),
+    };
+  });
+}
