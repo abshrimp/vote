@@ -4,7 +4,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { isAdmin } from "../src/lib/voting/admin.mjs";
 import {
   adminCookieName, googleConfig, startGoogleLogin, readGoogleLogin,
-  createGoogleAdminSession, readGoogleAdminSession, verifyGoogleIdToken,
+  createGoogleAdminSession, readGoogleAdminSession, verifiedGoogleAdminSession, verifyGoogleIdToken,
 } from "../src/lib/voting/google-admin.mjs";
 
 const secret = "test-secret-for-admin-google-session-123456789";
@@ -29,6 +29,7 @@ test("Google admin cookie is signed, allowlisted, and expires in eight hours", (
     assert.deepEqual(readGoogleAdminSession(cookie, config, now)?.email, "admin@example.com");
     assert.equal(readGoogleAdminSession(cookie, config, now + 8*3600*1000), null);
     assert.equal(readGoogleAdminSession(cookie, { ...config, allowed: ["other@example.com"] }, now), null);
+    assert.equal(verifiedGoogleAdminSession(cookie, now)?.email, "admin@example.com");
     assert.equal(readGoogleAdminSession(cookie.slice(0, -1) + "x", config, now), null);
     assert.equal(adminCookieName(true), "__Host-festival-admin");
   } finally {
@@ -37,7 +38,7 @@ test("Google admin cookie is signed, allowlisted, and expires in eight hours", (
   }
 });
 
-test("Google admin authentication rejects old Bearer tokens", () => {
+test("Google admin authentication rejects old Bearer tokens", async () => {
   const old = { secret: process.env.VOTE_HMAC_SECRET, id: process.env.GOOGLE_CLIENT_ID,
     client: process.env.GOOGLE_CLIENT_SECRET, emails: process.env.GOOGLE_ADMIN_EMAILS };
   process.env.VOTE_HMAC_SECRET = secret;
@@ -50,8 +51,8 @@ test("Google admin authentication rejects old Bearer tokens", () => {
       cookies: { get(name) { return name === adminCookieName() ? { value: cookie } : undefined; } },
       headers: new Headers(),
     };
-    assert.equal(isAdmin(request), true);
-    assert.equal(isAdmin({ cookies: { get() { return undefined; } },
+    assert.equal(await isAdmin(request), true);
+    assert.equal(await isAdmin({ cookies: { get() { return undefined; } },
       headers: new Headers({ authorization: "Bearer old-admin-secret" }) }), false);
     assert.equal(googleConfig().allowed[0], "admin@example.com");
   } finally {
