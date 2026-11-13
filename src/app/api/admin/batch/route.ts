@@ -212,7 +212,7 @@ async function publicIdConflict(operations: Operation[]) {
 }
 
 export async function POST(request: NextRequest) {
-  if (!isAdmin(request)) return fail("管理者認証が必要です。", 401);
+  if (!(await isAdmin(request))) return fail("管理者認証が必要です。", 401);
   if (!sameOrigin(request)) return fail("送信元が正しくありません。", 403);
   let operations: Operation[];
   try {
