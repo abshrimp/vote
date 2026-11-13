@@ -4,6 +4,7 @@ import Script from "next/script";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { candidateElementId, publicIdFromHash, resolveTargets } from "@/lib/voting/links.mjs";
 import { applySelections, withPollSelections } from "@/lib/voting/logic.mjs";
+import { clearPersonalCache, readPersonalCache, writePersonalCache } from "@/lib/voting/personal-cache.mjs";
 import styles from "./vote.module.css";
 import Mark from "../Mark";
 import { Dialog, Snackbar, useConfirm } from "../ui/Dialog";
@@ -35,6 +36,7 @@ declare global {
 const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY ?? "";
 type Target = { pollId: string; candidateId: string | null };
 type VoteSelection = { poll_id: string; candidate_id: string; is_official: number };
+type PersonalState = { selections: VoteSelection[]; actions: Action[] };
 
 function fingerprint() {
   return {
@@ -82,6 +84,22 @@ export default function VoteClient() {
   const challengeDialog = useRef<HTMLDialogElement>(null);
   const widgetElement = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
+  const sessionCacheKey = useRef("");
+  const personalState = useRef<PersonalState | null>(null);
+
+  function rememberPersonal(personal: PersonalState) {
+    personalState.current = personal;
+    if (!sessionCacheKey.current) return;
+    try { writePersonalCache(window.localStorage, sessionCacheKey.current, personal); }
+    catch { /* Browser storage may be disabled. */ }
+  }
+
+  function discardPersonalCache() {
+    personalState.current = null;
+    try { clearPersonalCache(window.localStorage); }
+    catch { /* Browser storage may be disabled. */ }
+  }
+
   const needsVerification = saving !== null ||
     polls.some(poll => !poll.voted && poll.candidates.length > 0) ||
     actions.some(action => action.kind === "claim" && action.eligible && !action.status);
@@ -96,12 +114,26 @@ export default function VoteClient() {
         ]);
         if (!session.ok) throw new Error("投票セッションを開始できませんでした。");
         if (!pageResponse.ok) throw new Error("公開フォームを取得できませんでした。");
-        const personalResponse = await fetch("/api/vote/polls", {
-          credentials: "same-origin", cache: "no-store",
-        });
-        if (!personalResponse.ok) throw new Error("投票情報を取得できませんでした。");
-        const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await pageResponse.json();
-        const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
+        const sessionData: { cacheKey?: string } = await session.json();
+        if (!sessionData.cacheKey) throw new Error("投票セッションを確認できませんでした。");
+        sessionCacheKey.current = sessionData.cacheKey;
+        let cached: PersonalState | null = null;
+        try { cached = readPersonalCache(window.localStorage, sessionData.cacheKey); }
+        catch { /* Browser storage may be disabled. */ }
+        const [page, personal]: [
+          { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings },
+          PersonalState,
+        ] = await Promise.all([
+          pageResponse.json(),
+          cached ? Promise.resolve(cached) : (async () => {
+            const response = await fetch("/api/vote/polls", {
+              credentials: "same-origin", cache: "no-store",
+            });
+            if (!response.ok) throw new Error("投票情報を取得できませんでした。");
+            return response.json() as Promise<PersonalState>;
+          })(),
+        ]);
+        rememberPersonal(personal);
         if (mounted) {
           setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
           setActions(personal.actions ?? []);
@@ -169,8 +201,12 @@ export default function VoteClient() {
     try {
       const response = await fetch("/api/vote/actions", { cache: "no-store" });
       if (!response.ok) throw new Error();
-      setActions((await response.json()).actions ?? []);
+      const updated: { actions?: Action[] } = await response.json();
+      const nextActions = updated.actions ?? [];
+      setActions(nextActions);
+      if (personalState.current) rememberPersonal({ ...personalState.current, actions: nextActions });
     } catch {
+      discardPersonalCache();
       notify(message + "。追加機能の状態を更新できませんでした。ページを再読み込みしてください。");
     }
   }
@@ -183,7 +219,8 @@ export default function VoteClient() {
       includePublic ? fetch("/api/vote/public", { credentials: "omit" }) : null,
     ]);
     if (!personalResponse.ok || (publicResponse && !publicResponse.ok)) throw new Error();
-    const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
+    const personal: PersonalState = await personalResponse.json();
+    rememberPersonal(personal);
     if (publicResponse) {
       const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await publicResponse.json();
       setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
@@ -214,11 +251,14 @@ export default function VoteClient() {
       });
       const body: { ok?: boolean; error?: string; redeemedAt?: string; refreshRequired?: boolean } = await response.json();
       if (!response.ok || !body.ok) throw new Error(body.error ?? "操作できませんでした。");
-      setActions(old => old.map(item => item.id === action.id
+      const updatedActions = (personalState.current?.actions ?? actions).map(item => item.id === action.id
         ? { ...item, status: "used", eligible: true, usedAt: body.redeemedAt ?? null }
-        : item));
+        : item);
+      setActions(updatedActions);
+      if (personalState.current) rememberPersonal({ ...personalState.current, actions: updatedActions });
       await showSuccess("「" + action.title + "」を引き換えました", body.refreshRequired !== false);
     } catch (error) {
+      discardPersonalCache();
       notify(error instanceof Error ? error.message : "エラーが発生しました。");
     } finally {
       updateToken("");
@@ -268,6 +308,11 @@ export default function VoteClient() {
         // Update locally instead of re-reading every poll and candidate (saves Turso rows read).
         setPolls(old => old.map(p => p.id === poll.id
           ? withPollSelections(p, [...p.selectedIds, candidateId], p.conditionIds) : p));
+        if (personalState.current) rememberPersonal({
+          ...personalState.current,
+          selections: [...personalState.current.selections,
+            { poll_id: poll.id, candidate_id: candidateId, is_official: 1 }],
+        });
         await showSuccess("「" + (candidate?.name ?? "") + "」に投票しました", actions.length > 0);
       } else {
         const message = data.message ?? "投票に失敗しました。";
@@ -276,10 +321,12 @@ export default function VoteClient() {
           else if (data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
           notify(message);
         } catch {
+          discardPersonalCache();
           notify(message + " ページを再読み込みして投票状況を確認してください。");
         }
       }
     } catch {
+      discardPersonalCache();
       notify("通信に失敗しました。再読み込みして投票状況を確認してください。");
     } finally {
       updateToken("");
