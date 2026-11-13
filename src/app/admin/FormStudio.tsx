@@ -285,6 +285,18 @@ export default function FormStudio({ initialData, onLogout }: {
     return list;
   }, [blocks, data]);
 
+  // The form's page blocks define the department order. The admin API returns
+  // polls by ID, which is not necessarily the order shown in the form.
+  const orderedPolls = useMemo(() => {
+    const seen = new Set<string>();
+    return items.flatMap(item => {
+      const poll = item.poll;
+      if (!poll || seen.has(poll.id)) return [];
+      seen.add(poll.id);
+      return [poll];
+    });
+  }, [items]);
+
   function stageCurrent() {
     const ops: Record<string, {type:string;[key:string]:unknown}> = {};
     const current = items.find(i => i.id === selected);
@@ -1241,7 +1253,7 @@ export default function FormStudio({ initialData, onLogout }: {
       </aside>
     </div>}
     {tab === "responses" && <div className={styles.detailsPage}>
-      <AbuseReport polls={data.polls.map(p => ({ id: p.id, title: p.title }))} />
+      <AbuseReport polls={orderedPolls.map(p => ({ id: p.id, title: p.title }))} />
       <div className={styles.panel}>
         <div className={styles.resultsHeader}>
           <h2>集計</h2>
@@ -1261,7 +1273,7 @@ export default function FormStudio({ initialData, onLogout }: {
           <div><strong>{totalClaims}</strong><span>引き換え数</span></div>
         </div>
       </div>
-      {data.polls.map(p => <section className={styles.panel} key={p.id}><h3>{p.title}</h3>
+      {orderedPolls.map(p => <section className={styles.panel} key={p.id}><h3>{p.title}</h3>
         {sortResultCandidates(p.candidates, resultsSort).map(c => <div key={c.id} className={styles.resultsRow}>
           <span>{c.name}</span><div className={styles.resultTrack}><div className={styles.resultBar}
             style={{ width: (p.candidates.reduce((n,x) => n+Number(x.votes),0)
