@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
     // For independent actions the client can mark this card as used without
     // fetching the full voter history a second time. A dependent action still
     // needs server-side eligibility evaluation against up-to-date voter facts.
-    const refreshRequired = definitions.some(row => {
+    const refreshRequired = definitions.some((row: Record<string, unknown>) => {
       try {
         return referencesUsedAction(JSON.parse(String(row.condition_json)), String(data.actionId));
       } catch {
