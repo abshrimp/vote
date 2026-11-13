@@ -509,7 +509,7 @@
 .turnstileIdle { pointer-events: none; }
 /* The token is already ready for voting: do not leave Cloudflare's success
    confirmation floating over the page. Keep the widget mounted for reset. */
-.turnstileVerified { visibility: hidden; }
+.turnstileVerified { visibility: hidden; opacity: 0; pointer-events: none; }
 .turnstileDialog {
   width: min(400px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);
