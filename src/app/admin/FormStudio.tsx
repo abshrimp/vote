@@ -234,6 +234,7 @@ export default function FormStudio({ initialData, onLogout }: {
     setTheme(layout.settings ?? {});
     setPending({});
     setLayoutDirty(false);
+    setHistoryResetKey(key => key + 1);
     return { admin: admin as AdminData, blocks: (layout.blocks ?? []) as Block[] };
   }, []);
 
@@ -400,7 +401,6 @@ export default function FormStudio({ initialData, onLogout }: {
         setPending({});
         setLayoutDirty(false);
       }
-      setHistoryResetKey(key => key + 1);
       setNotice("変更を保存しました");
     }catch(e){setNotice(e instanceof Error?e.message:"保存できませんでした。");}
     finally{setBusy(false);}
