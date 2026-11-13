@@ -1,4 +1,80 @@
 .wrap { margin-top: 12px; }
+
+.rowToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.rowActions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.rowActions button {
+  min-height: 32px;
+  padding: 4px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.rowActions button:not(:disabled):hover { background: var(--green-container); }
+.rowActions .deleteAction { color: var(--error); }
+.rowActions .deleteAction:not(:disabled):hover { background: #fcefee; }
+.rowActions button:disabled { opacity: .45; }
+
+.sheet thead .selectHead,
+.sheet thead .dragHead,
+.selectCell,
+.dragCell {
+  width: 36px;
+  min-width: 36px;
+  text-align: center;
+}
+.selectCell,
+.dragCell { padding: 0 !important; background: var(--surface); }
+.selectCell input,
+.selectHead input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  vertical-align: middle;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.rowDragHandle {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: grab;
+  touch-action: none;
+}
+.rowDragHandle:active { cursor: grabbing; }
+.rowDragHandle:not(:disabled):hover { background: var(--green-container); color: var(--green); }
+.rowDragHandle:disabled { opacity: .4; }
+.sortingRows tbody tr { transition: transform .16s ease; }
+.sortingRows tbody tr.dragSource { opacity: .28; }
+.sortingRows tbody tr.dropBefore > *,
+.sortingRows tbody tr.dropAfter > * {
+  box-shadow: inset 0 3px var(--green);
+}
+.sortingRows tbody tr.dropAfter > * { box-shadow: inset 0 -3px var(--green); }
+@media (prefers-reduced-motion: reduce) {
+  .sortingRows tbody tr { transition: none; }
+}
+
 .scroller {
   overflow: auto;
   max-height: 520px;

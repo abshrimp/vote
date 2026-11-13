@@ -25,6 +25,7 @@ function prepare(operations: Operation[]) {
   const steps: { sql: string; args: (string | number | null)[] }[] = [];
   const publicIdUpdates: { sql: string; args: (string | number | null)[] }[] = [];
   const layoutOrder: { sql: string; args: (string | number | null)[] }[] = [];
+  const candidateOrder: { sql: string; args: (string | number | null)[] }[] = [];
   for (const op of operations) {
     switch (op.type) {
       case "poll": {
@@ -128,6 +129,34 @@ function prepare(operations: Operation[]) {
           args: [name, extra, op.pollId as string, op.id as string, name, extra] });
         break;
       }
+      case "candidate_delete": {
+        const ids = op.ids;
+        if (!validId(op.pollId) || !Array.isArray(ids) || !ids.length || ids.length > 500 ||
+          !ids.every(validId) || new Set(ids).size !== ids.length) {
+          throw Error("削除する候補が正しくありません。");
+        }
+        const placeholders = ids.map(() => "?").join(",");
+        const args = [op.pollId as string, ...(ids as string[])];
+        // Delete votes first to satisfy the FK; the vote trigger updates totals.
+        steps.push({ sql: "DELETE FROM votes WHERE poll_id=? AND candidate_id IN (" + placeholders + ")", args });
+        steps.push({ sql: "DELETE FROM candidates WHERE poll_id=? AND id IN (" + placeholders + ")", args });
+        break;
+      }
+      case "candidate_order": {
+        const ids = op.ids;
+        if (!validId(op.pollId) || !Array.isArray(ids) || !ids.length || ids.length > 500 ||
+          !ids.every(validId) || new Set(ids).size !== ids.length) {
+          throw Error("候補の並び順が正しくありません。");
+        }
+        const position = "CASE id " + ids.map(() => "WHEN ? THEN ?").join(" ") + " END";
+        const pairs = ids.flatMap((id, i) => [id as string, (i + 1) * 10]);
+        candidateOrder.push({
+          sql: "UPDATE candidates SET sort_order=" + position + " WHERE poll_id=? AND id IN (" +
+            ids.map(() => "?").join(",") + ") AND sort_order IS NOT " + position,
+          args: [...pairs, op.pollId as string, ...(ids as string[]), ...pairs],
+        });
+        break;
+      }
       case "candidate_new": {
         const name = cleanText(op.name);
         if (!validId(op.pollId) || !validId(op.id) || !name || !validColumns(op.columns) || !validCells(op.extra, op.columns)) throw Error("候補の入力が正しくありません。");
@@ -196,8 +225,8 @@ function prepare(operations: Operation[]) {
       }
     }
   }
-  // Positions are applied last, after every new block exists.
-  steps.push(...layoutOrder);
+  // Positions are applied after inserts and deletions and skip unchanged rows.
+  steps.push(...candidateOrder, ...layoutOrder);
   return steps;
 }
 
