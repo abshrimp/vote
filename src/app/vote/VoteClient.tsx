@@ -124,17 +124,26 @@ export default function VoteClient() {
     if (response.ok) setActions((await response.json()).actions ?? []);
   }
 
-  async function refresh() {
-    const [publicResponse, personalResponse] = await Promise.all([
-      fetch("/api/vote/public", { credentials: "omit" }),
-      fetch("/api/vote/polls", { cache: "no-store" }),
-    ]);
-    if (!publicResponse.ok || !personalResponse.ok) return;
-    const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await publicResponse.json();
+  async function refresh(includePublic = false) {
+    // A duplicate rejection only changes personal vote state. Re-querying all
+    // 196 public candidates is unnecessary; a changed poll limit is the
+    // exception and gets a complete public refresh.
+    const personalRequest = fetch("/api/vote/polls", { cache: "no-store" });
+    const publicRequest = includePublic
+      ? fetch("/api/vote/public", { credentials: "omit" }) : null;
+    const personalResponse = await personalRequest;
+    if (!personalResponse.ok) return;
     const personal: { selections?: VoteSelection[]; actions?: Action[] } = await personalResponse.json();
-    setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
-    setBlocks(page.blocks ?? []);
-    setSettings(page.settings ?? {});
+    if (publicRequest) {
+      const publicResponse = await publicRequest;
+      if (!publicResponse.ok) return;
+      const page: { polls?: Poll[]; blocks?: LayoutBlock[]; settings?: ThemeSettings } = await publicResponse.json();
+      setPolls(applySelections(page.polls ?? [], personal.selections ?? []));
+      setBlocks(page.blocks ?? []);
+      setSettings(page.settings ?? {});
+    } else {
+      setPolls(current => applySelections(current, personal.selections ?? []));
+    }
     setActions(personal.actions ?? []);
   }
 
@@ -205,7 +214,8 @@ export default function VoteClient() {
         setSelected(old => ({ ...old, [poll.id]: "" }));
         notify("「" + (candidate?.name ?? "") + "」に投票しました");
       } else {
-        if (data.code === "ALREADY_VOTED" || data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
+        if (data.code === "ALREADY_VOTED") await refresh(true);
+        else if (data.code === "ALREADY_SELECTED" || data.code === "POSSIBLE_DUPLICATE") await refresh();
         notify(data.message ?? "投票に失敗しました。");
       }
     } catch {
