@@ -50,7 +50,7 @@ test("public query is indexed and metadata/settings never read the candidate lis
   const publicRows = db.prepare(PUBLIC_POLLS_SQL).all(now, now);
   assert.equal(publicRows.length, 196);
   assert.match(db.prepare("EXPLAIN QUERY PLAN " + PUBLIC_POLLS_SQL)
-    .all(now, now).map(row => row.detail).join("\n"), /candidates_order/);
+    .all(now, now).map(row => row.detail).join("\n"), /SEARCH c USING (PRIMARY KEY|INDEX candidates_order)/);
 
   const settings = db.prepare(PUBLIC_SETTINGS_SQL).all();
   assert.deepEqual(settings.map(row => row.key).sort(), ["logo", "organizerName"]);
