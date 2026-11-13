@@ -13,7 +13,7 @@ import { normalizePublicIds, splitPublicIds } from "./links.mjs";
 export function publicIdCheckPlan(operations) {
   const updates = operations.filter(operation => operation.type === "public_id");
   if (updates.length !== 1 || operations.some(operation =>
-    ["poll_new", "candidate_new", "poll_delete"].includes(operation.type))) return null;
+    ["poll_new", "candidate_new", "poll_delete", "candidate_delete"].includes(operation.type))) return null;
 
   const change = updates[0];
   const value = normalizePublicIds(change.publicId);
@@ -53,6 +53,10 @@ export function projectPublicIds(pollRows, candidateRows, operations) {
     if (op.type === "poll_delete") {
       polls = polls.filter(p => p.id !== op.id);
       candidates = candidates.filter(c => c.poll_id !== op.id);
+    }
+    if (op.type === "candidate_delete") {
+      const ids = new Set(op.ids);
+      candidates = candidates.filter(c => c.poll_id !== op.pollId || !ids.has(c.id));
     }
     if (op.type === "public_id") {
       const value = normalizePublicIds(op.publicId) ?? null;
