@@ -3,7 +3,7 @@ import { isAdmin, sameOrigin, cleanText, validRange, validateAction, actionConfi
 import { validId } from "@/lib/voting/logic.mjs";
 import { validColumns, validCells, validFontSize, validStyle, serializeColumns } from "@/lib/voting/columns.mjs";
 import { normalizePublicIds, findPublicIdConflict } from "@/lib/voting/links.mjs";
-import { publicIdCheckPlan } from "@/lib/voting/public-id-check.mjs";
+import { publicIdCheckPlan, projectPublicIds } from "@/lib/voting/public-id-check.mjs";
 import { SETTING_RULES } from "@/lib/voting/settings.mjs";
 import { customGoogleFont, verifyGoogleFont } from "@/lib/voting/fonts.mjs";
 import { validateBlock } from "@/lib/voting/layout.mjs";
@@ -203,22 +203,12 @@ async function publicIdConflict(operations: Operation[]) {
     { sql: "SELECT id,public_id FROM polls" },
     { sql: "SELECT poll_id,id,public_id FROM candidates" },
   ]);
-  let polls = pollRows.rows as { id: string; public_id: string | null }[];
-  let candidates = candidateRows.rows as { poll_id: string; id: string; public_id: string | null }[];
-  for (const op of operations) {
-    if (op.type === "poll_new") polls.push({ id: op.id as string, public_id: null });
-    if (op.type === "candidate_new") candidates.push({ poll_id: op.pollId as string, id: op.id as string, public_id: null });
-    if (op.type === "poll_delete") {
-      polls = polls.filter(p => p.id !== op.id);
-      candidates = candidates.filter(c => c.poll_id !== op.id);
-    }
-    if (op.type === "public_id") {
-      const value = normalizePublicIds(op.publicId) ?? null;
-      if (op.candidateId === null) polls = polls.map(p => p.id === op.pollId ? { ...p, public_id: value } : p);
-      else candidates = candidates.map(c => c.poll_id === op.pollId && c.id === op.candidateId ? { ...c, public_id: value } : c);
-    }
-  }
-  return findPublicIdConflict(polls, candidates);
+  const projected = projectPublicIds(
+    pollRows.rows as { id: string; public_id: string | null }[],
+    candidateRows.rows as { poll_id: string; id: string; public_id: string | null }[],
+    operations,
+  );
+  return findPublicIdConflict(projected.polls, projected.candidates);
 }
 
 export async function POST(request: NextRequest) {
