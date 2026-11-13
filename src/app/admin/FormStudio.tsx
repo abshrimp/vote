@@ -728,7 +728,7 @@ export default function FormStudio({ initialData, onLogout }: {
 
   return <main className={styles.studio} style={themeVars(theme)}>
     <header className={styles.topbar}>
-      <div className={styles.brand}>{theme.logo ? <img src={theme.logo} alt="" className={styles.brandLogo}/> : <Mark className={styles.brandIcon} size={36} />}
+      <div className={styles.brand}>{ready && (theme.logo ? <img src={theme.logo} alt="" className={styles.brandLogo}/> : <Mark className={styles.brandIcon} size={36}/>)}
         <div><div className={styles.brandName}>{formTitle || "投票フォーム"}</div><span className={unsaved ? `${styles.saved} ${styles.dirty}` : styles.saved}>{unsaved ? "未保存の変更があります" : "すべての変更を保存済み"}</span></div>
       </div>
       <div className={styles.topActions}>
